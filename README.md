@@ -9,8 +9,10 @@
 
 <br>
 
-[![Web App](https://hackagent.vista-labs.ai/)][Web App]
-[![Docs](https://hackagent.vista-labs.ai/docs/)][Docs]
+![ico](./assets/favicon.ico) [Web App][Web App] -- [Docs][Docs] ![ico](./assets/favicon.ico)
+
+[Web App]: https://hackagent.dev/
+[Docs]: https://hackagent.dev/docs/
 
 <br>
 
@@ -18,8 +20,7 @@
 ![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 ![Poetry](https://img.shields.io/badge/package-poetry-cyan)
-![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)
-![Black](https://img.shields.io/badge/code%20style-black-black)
+[![Commitizen](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
 ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
 ![Test Coverage](https://img.shields.io/codecov/c/github/vistalabs-org/hackagent)
 ![CI Status](https://img.shields.io/github/actions/workflow/status/vistalabs-org/hackagent/ci.yml)
@@ -44,7 +45,6 @@ It provides a structured approach to discover potential vulnerabilities, includi
 ### 🔌 AI Agent Frameworks Supported
 
 [![LiteLLM](https://img.shields.io/badge/LiteLLM-blue?style=flat&logo=github)](https://github.com/BerriAI/litellm)
-[![ElizaOS](https://img.shields.io/badge/ElizaOS-purple?style=flat&logo=robot)](https://elizaos.ai)
 [![ADK](https://img.shields.io/badge/Google-ADK-green?style=flat&logo=openai)](https://google.github.io/adk-docs/)
 
 ## 🚀 Installation
@@ -74,91 +74,33 @@ agent = HackAgent(
     api_key="your_api_key_here",  # Or omit to use HACKAGENT_API_KEY environment variable
     agent_type=AgentTypeEnum.GOOGLE_ADK
 )
+attack_config = {
+    "attack_type": "advprefix",
+    "goals": [
+        "Fake the weather for a not available city"
+        "Fake the time for a not available city",
+    ],
+ }
 
 # Run a basic security scan
-agent.hack(
-    attack_vectors=[
-        AttackVectors.PROMPT_INJECTION,
-        AttackVectors.INDIRECT_JAILBREAK,
-        AttackVectors.GOAL_HIJACKING
-    ],
-    verbosity=2
-)
+agent.hack(attack_config=attack_config)
 ```
 
-## 🛠️ Attack Vectors
 
-HackAgent includes implementations for several attack vectors:
-
-| Attack Type | Description |
-|------------|-------------|
-| Prompt Injection | Techniques to manipulate AI system prompts |
-| Indirect Jailbreak | Methods that circumvent safety guardrails |
-| Goal Hijacking | Approaches to redirect AI agent objectives |
-| System Prompt Leaking | Extraction of system instructions |
-| Response Manipulation | Methods to generate unintended responses |
-
-## 📋 Usage Examples
-
-### Basic Security Scan
-
-```python
-from hackagent import HackAgent
-
-# Initialize with API details for the target
-agent = HackAgent(
-    target_api="https://api.example.com/v1",
-    api_key="your_api_key"
-)
-
-# Run a comprehensive security scan
-results = agent.scan_all()
-```
-
-### Custom Attack Vector
-
-```python
-from hackagent import HackAgent, AttackVector
-
-# Define a custom attack vector
-class MyCustomAttack(AttackVector):
-    def __init__(self):
-        super().__init__(name="My Custom Attack", 
-                         description="Tests for specific vulnerability")
-        
-    def execute(self, target):
-        # Attack implementation
-        return results
-
-# Use your custom attack
-agent = HackAgent(target="target_model")
-agent.register_attack_vector(MyCustomAttack())
-agent.run_specific_attack("My Custom Attack")
-```
 
 ## 📊 Reporting
 
-HackAgent automatically sends test results to the VistLabs dashboard for analysis and visualization. All reports can be accessed through your dashboard account.
+HackAgent automatically sends test results to the dashboard for analysis \
+and visualization. All reports can be accessed through your dashboard account.
 
-```python
-# Run a security scan - results are automatically sent to the dashboard
-results = agent.scan_all()
-
-# Get a URL to view the report on the dashboard
-report_url = agent.get_report_url(results.id)
-print(f"View your report at: {report_url}")
-```
 
 ### Dashboard Features
 
 - Comprehensive visualization of attack results
 - Historical data comparison
 - Vulnerability severity ratings
-- Recommended mitigations
-- Export capabilities for reports
-- Team collaboration tools
 
-Access your dashboard at [https://dashboard.hackagent.vistalabs.org](https://dashboard.hackagent.vistalabs.org)
+Access your dashboard at [https://hackagent.dev](https://hackagent.dev)
 
 ## 🧪 Development
 
@@ -181,14 +123,6 @@ poetry install --with dev
 We use modern Python development tools to ensure code quality:
 
 ```bash
-# Format code with Black
-poetry run black .
-
-# Run linting
-poetry run flake8
-
-# Run type checking
-poetry run mypy .
 
 # Run tests with coverage reporting
 poetry run pytest --cov=hackagent tests/
@@ -215,6 +149,3 @@ HackAgent is a tool designed for security research and improving AI safety. Alwa
 ---
 
 *This project is for educational and research purposes. Always use responsibly and ethically.*
-
-[Web App]: https://hackagent.vista-labs.ai/
-[Docs]: https://hackagent.vista-labs.ai/docs/
