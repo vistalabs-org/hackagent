@@ -1,0 +1,19 @@
+repos:
+- hooks:
+  - id: commitizen
+    stages: [commit-msg]
+    additional_dependencies: [cz-conventional-gitmoji]
+  - id: commitizen-branch
+    stages:
+    - pre-push
+  repo: https://github.com/commitizen-tools/commitizen
+  rev: v4.7.0
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  # Ruff version. Optional: Ruff will find and use the project's Ruff version Ruff otherwise.
+  rev: v0.5.5
+  hooks:
+    # Run the linter.
+    - id: ruff
+      args: [--fix]
+    # Run the formatter.
+    - id: ruff-format

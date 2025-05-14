@@ -1,0 +1,59 @@
+name: CI Checks
+
+on:
+  push:
+    branches: [ main ] # Or your default branch
+  pull_request:
+    branches: [ main ] # Or your default branch
+
+jobs:
+  commit-check:
+    name: Check Commit Messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' # Only run on PRs
+    steps:
+      - name: Check out code with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for commit range check
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Poetry
+        uses: abatilo/actions-poetry@v4.0.0
+        with:
+          poetry-version: '1.8.3'
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Check commit messages in PR
+        run: poetry run cz check --rev-range ${{ github.event.pull_request.base.sha }}..${{ github.sha }}
+
+  python-checks:
+    name: Python Linting and Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Poetry
+        uses: abatilo/actions-poetry@v4.0.0
+        with:
+          poetry-version: '1.8.3'
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Run Ruff Linting
+        run: poetry run ruff check .
+
+      - name: Run Ruff Formatting Check
+        run: poetry run ruff format --check . 

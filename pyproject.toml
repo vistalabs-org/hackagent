@@ -1,0 +1,63 @@
+[tool.poetry]
+name = "hackagent"
+version = "0.1.0"
+description = "Python client for interacting with the HackAgent API."
+authors = [
+    "Nicola Franco <nicola@vista-labs.ai>",
+    "Silvio Busonero <silvio@vista-labs.ai>",
+]
+readme = "README.md"
+packages = [{include = "hackagent"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.31.0"
+pydantic = "^2.0"
+google-adk = "^0.5.0"
+litellm = "^1.69.1"
+python-dotenv = "^1.1.0"
+rich = "^14.0.0"
+pandas = "^2.2.3"
+
+[tool.poetry.group.dev.dependencies]
+openapi-python-client = "^0.24.3"
+ruff = "^0.11.9"
+pytest = "^8.3.5"
+pre-commit = "^4.2.0"
+commitizen = "^4.7.0"
+cz-conventional-gitmoji = "^0.7.0"
+pytest-cov = "^6.1.1"
+
+[tool.commitizen]
+name = "cz_gitmoji"
+tag_format = "$version"
+version_scheme = "pep440"
+version_provider = "poetry"
+update_changelog_on_bump = true
+major_version_zero = true
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+branch = true
+parallel = true
+command_line = "--module pytest"
+data_file = "reports/.coverage"
+source = ["hackagent"]
+
+[tool.coverage.report]
+fail_under = 80
+precision = 1
+show_missing = true
+skip_covered = true
+exclude_lines = [
+  "pragma: no cover",
+  "@overload",
+  'if __name__ == "__main__":',
+  "if TYPE_CHECKING:",
+]
+
+[tool.coverage.xml]
+output = "reports/coverage.xml"
