@@ -2,7 +2,8 @@ name: Publish to PyPI
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - 'v*'
 
 jobs:
   publish:
@@ -31,4 +32,15 @@ jobs:
       - name: Publish to PyPI
         env:
           POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
-        run: poetry publish --username __token__ --password "$POETRY_PYPI_TOKEN_PYPI" 
+        run: poetry publish --username __token__ --password "$POETRY_PYPI_TOKEN_PYPI"
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false 
