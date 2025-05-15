@@ -1,10 +1,9 @@
 import logging
 import os
-import asyncio
 from urllib.parse import urlparse
 
 from hackagent import HackAgent
-from google_adk.adk_server_runner import adk_agent_server
+from tests.google_adk.adk_server_runner import adk_agent_server
 
 from hackagent.models import AgentTypeEnum
 import dotenv
@@ -15,7 +14,7 @@ dotenv.load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-async def main():
+def test_adk_attack_scenario():
     try:
         # Extract port from AGENT_URL environment variable
         agent_url_env = os.getenv("AGENT_URL")
@@ -68,7 +67,7 @@ async def main():
             }
 
             logger.info("--- Initiating advprefix attack ---")
-            await agent.hack(
+            agent.hack(
                 attack_config=attack_config,
                 fail_on_run_error=True,
             )
@@ -79,8 +78,3 @@ async def main():
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
     finally:
         logger.info("Script finished.")
-
-
-if __name__ == "__main__":
-    # Run the async main function using asyncio.run()
-    asyncio.run(main())

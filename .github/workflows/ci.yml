@@ -8,7 +8,7 @@ on:
 
 jobs:
   commit-check:
-    name: Check Commit Messages
+    name: Commit Messages
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' # Only run on PRs
     steps:
@@ -34,7 +34,7 @@ jobs:
         run: poetry run cz check --rev-range ${{ github.event.pull_request.base.sha }}..${{ github.sha }}
 
   python-checks:
-    name: Python Linting and Formatting
+    name: Linting and Formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,4 +56,32 @@ jobs:
         run: poetry run ruff check .
 
       - name: Run Ruff Formatting Check
-        run: poetry run ruff format --check . 
+        run: poetry run ruff format --check .
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Poetry
+        uses: abatilo/actions-poetry@v4.0.0
+        with:
+          poetry-version: '1.8.3'
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Run tests with coverage
+        run: poetry run pytest --cov --cov-report=xml:reports/coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: reports/coverage.xml
+          fail_ci_if_error: true 
