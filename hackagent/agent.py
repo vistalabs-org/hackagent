@@ -52,17 +52,24 @@ class HackAgent:
         name: str = None,
         agent_type: AgentTypeEnum = AgentTypeEnum.UNKNOWN,
         base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
         token: Optional[str] = None,
         predefined_prompts: Optional[Dict[str, Tuple[str, str]]] = None,
         raise_on_unexpected_status: bool = False,
         timeout: Optional[float] = None,
         env_file_path: Optional[str] = None,
     ):
-        display_hackagent_splash()  # Display the splash screen on init
+        display_hackagent_splash()
+
+        resolved_auth_token = self._resolve_api_token(
+            direct_api_key_param=api_key,
+            fallback_token_param=token,
+            env_file_path=env_file_path,
+        )
 
         self.client = AuthenticatedClient(
             base_url=base_url,
-            token=self._resolve_api_token(token, env_file_path),
+            token=resolved_auth_token,
             prefix="Api-Key",
             raise_on_unexpected_status=raise_on_unexpected_status,
             timeout=timeout,
@@ -85,30 +92,47 @@ class HackAgent:
         }
 
     def _resolve_api_token(
-        self, token: Optional[str], env_file_path: Optional[str]
+        self,
+        direct_api_key_param: Optional[str],
+        fallback_token_param: Optional[str],
+        env_file_path: Optional[str],
     ) -> str:
-        """Resolves the API token from direct input or environment variables."""
-        api_token_resolved = token
-        if api_token_resolved is None:
-            logger.debug(
-                "API token not provided directly, attempting to load from environment."
-            )
-            dotenv_to_load = env_file_path or find_dotenv(usecwd=True)
+        """Resolves the API token from direct api_key, fallback token parameter, or environment variables."""
+        if direct_api_key_param is not None:
+            logger.debug("Using API token provided directly via 'api_key' parameter.")
+            return direct_api_key_param
 
-            if dotenv_to_load:
-                logger.debug(f"Loading .env file from: {dotenv_to_load}")
-                load_dotenv(dotenv_to_load)
-            else:
-                logger.debug("No .env file found to load.")
+        # If direct_api_key_param is None, try the fallback_token_param
+        api_token_resolved = fallback_token_param
+        if api_token_resolved is not None:
+            logger.debug("Using API token provided via 'token' parameter.")
+            # This token was provided, so we use it.
+            # The original logic would then check if it's None *again* before hitting env,
+            # but if it's not None here, it should be used.
+            return api_token_resolved
 
-            api_token_resolved = os.getenv("HACKAGENT_API_TOKEN")
+        # If both direct_api_key_param and fallback_token_param are None, attempt to load from environment.
+        logger.debug(
+            "API token not provided via 'api_key' or 'token' parameters, attempting to load from environment."
+        )
+        dotenv_to_load = env_file_path or find_dotenv(usecwd=True)
+
+        if dotenv_to_load:
+            logger.debug(f"Loading .env file from: {dotenv_to_load}")
+            load_dotenv(dotenv_to_load)
+        else:
+            logger.debug("No .env file found to load.")
+
+        api_token_resolved = os.getenv("HACKAGENT_API_TOKEN")
 
         if not api_token_resolved:
             error_message = (
-                "API token not provided and not found in HACKAGENT_API_TOKEN "
-                "environment variable (after attempting to load .env)."
+                "API token not provided via 'api_key' or 'token' parameters, "
+                "and not found in HACKAGENT_API_TOKEN environment variable "
+                "(after attempting to load .env)."
             )
             raise ValueError(error_message)
+        logger.debug("Using API token from HACKAGENT_API_TOKEN environment variable.")
         return api_token_resolved
 
     async def hack(
