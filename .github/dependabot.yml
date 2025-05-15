@@ -8,7 +8,7 @@ updates:
     target-branch: "main"
     open-pull-requests-limit: 10
     commit-message:
-      prefix: "deps"
+      prefix: "bump"
       include: "scope"
 
   # Maintain dependencies for GitHub Actions
