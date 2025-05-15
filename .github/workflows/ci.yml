@@ -2,9 +2,9 @@ name: CI Checks
 
 on:
   push:
-    branches: [ main ] # Or your default branch
+    branches: ["**"]
   pull_request:
-    branches: [ main ] # Or your default branch
+    branches: ["**"]
 
 jobs:
   commit-check:

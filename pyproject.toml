@@ -8,13 +8,15 @@ authors = [
 ]
 readme = "README.md"
 packages = [{include = "hackagent"}]
+include = [
+    { path = "assets/*" }
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 requests = "^2.31.0"
 pydantic = "^2.0"
-google-adk = "^0.5.0"
-litellm = "^1.69.1"
+litellm = "^1.69.2"
 python-dotenv = "^1.1.0"
 rich = "^14.0.0"
 pandas = "^2.2.3"
@@ -27,6 +29,7 @@ pre-commit = "^4.2.0"
 commitizen = "^4.7.0"
 cz-conventional-gitmoji = "^0.7.0"
 pytest-cov = "^6.1.1"
+google-adk = "^0.5.0"
 
 [tool.commitizen]
 name = "cz_gitmoji"
