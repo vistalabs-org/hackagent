@@ -7,7 +7,7 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     # --- Model Configurations ---
     "generator": {
         "identifier": "ollama/llama2-uncensored",
-        "endpoint": "https://hackagent.vista-labs.ai/generator",
+        "endpoint": "https://hackagent.dev/generator",
         "batch_size": 2,
         "max_new_tokens": 50,
         "guided_topk": 50,
@@ -16,14 +16,14 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     "judges": [
         {
             "identifier": "ollama/llama3",
-            "endpoint": "https://hackagent.vista-labs.ai/judge",
+            "endpoint": "https://hackagent.dev/judge",
             "type": "harmbench",
         }
     ],
     "selection_judges": [
         {
             "identifier": "ollama/llama3",
-            "endpoint": "https://hackagent.vista-labs.ai/judge",
+            "endpoint": "https://hackagent.dev/judge",
             "type": "harmbench",
         }
     ],
