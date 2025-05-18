@@ -108,19 +108,19 @@ class HackAgent:
         else:
             logger.debug("No .env file found to load.")
 
-        api_token_resolved = os.getenv("HACKAGENT_API_TOKEN")
+        api_token_resolved = os.getenv("HACKAGENT_API_KEY")
 
         if not api_token_resolved:
             error_message = (
                 "API token not provided via 'api_key' parameter, "
-                "and not found in HACKAGENT_API_TOKEN environment variable "
+                "and not found in HACKAGENT_API_KEY environment variable "
                 "(after attempting to load .env)."
             )
             raise ValueError(error_message)
-        logger.debug("Using API token from HACKAGENT_API_TOKEN environment variable.")
+        logger.debug("Using API token from HACKAGENT_API_KEY environment variable.")
         return api_token_resolved
 
-    async def hack(
+    def hack(
         self,
         attack_config: Dict[str, Any],
         run_config_override: Optional[Dict[str, Any]] = None,
@@ -172,7 +172,7 @@ class HackAgent:
                 f"Using Victim Backend Agent ID: {backend_agent.id} for '{backend_agent.name}'"
             )
 
-            return await strategy.execute(
+            return strategy.execute(
                 attack_config=attack_config,
                 run_config_override=run_config_override,
                 fail_on_run_error=fail_on_run_error,

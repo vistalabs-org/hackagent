@@ -24,7 +24,7 @@ def setup_package_logging(
         log_level_env = os.getenv(
             f"{logger_name.upper()}_LOG_LEVEL", default_level_str
         ).upper()
-        level = getattr(logging, log_level_env, logging.INFO)
+        level = getattr(logging, log_level_env, logging.WARNING)
         package_logger.setLevel(level)
 
         rich_handler = RichHandler(

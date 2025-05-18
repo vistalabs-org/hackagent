@@ -22,7 +22,7 @@ class Agent(ABC):
         pass
 
     @abstractmethod
-    async def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Processes an incoming request and returns a standardized response.
         The response should be suitable for storage via the API and should ideally

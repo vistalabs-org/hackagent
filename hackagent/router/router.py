@@ -198,7 +198,8 @@ class AgentRouter:
             overwrite_metadata: If True, and an agent exists, its backend metadata is updated.
 
         Raises:
-            ValueError: If agent_type is unsupported or adapter instantiation fails.
+            ValueError: If agent_type is unsupported or adapter instantiation fails,
+                        or if the provided client has no base_url.
             RuntimeError: If backend communication or agent processing fails.
         """
         self.client = client
@@ -268,6 +269,10 @@ class AgentRouter:
             agent_type
         ]  # agent_type already validated in __init__
 
+        logger.debug(
+            f"ROUTER_DEBUG: adapter_class is: {adapter_class}, type: {type(adapter_class)}, id: {id(adapter_class)}"
+        )
+
         # Start with the operational config passed in
         adapter_instance_config = (
             adapter_operational_config.copy() if adapter_operational_config else {}
@@ -320,8 +325,14 @@ class AgentRouter:
 
         # Instantiate and register the adapter
         try:
+            logger.debug(
+                f"ROUTER_DEBUG: About to call adapter_class(id='{registration_key}', config_keys={list(adapter_instance_config.keys())})"
+            )
             adapter_instance = adapter_class(
                 id=registration_key, config=adapter_instance_config
+            )
+            logger.debug(
+                f"ROUTER_DEBUG: Called adapter_class. Resulting instance: {adapter_instance}, type: {type(adapter_instance)}"
             )
             self._agent_registry[registration_key] = adapter_instance
             logger.info(
@@ -689,65 +700,48 @@ class AgentRouter:
         )
 
     def get_agent_instance(self, registration_key: str) -> Agent | None:
-        """
-        Retrieves an instantiated agent adapter from the router's registry.
+        """Retrieves a registered agent instance by its registration key."""
+        return self._agent_registry.get(registration_key)
 
-        Args:
-            registration_key: The backend agent's UUID string.
-
-        Returns:
-            An instance of the agent adapter, or None if not found.
-        """
-        instance = self._agent_registry.get(registration_key)
-        if not instance:
-            logger.warning(
-                f"No agent adapter found in router registry for key: {registration_key}"
-            )
-        return instance
-
-    async def route_request(
+    def route_request(
         self, registration_key: str, request_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Routes a request to the specified agent and returns its standardized response.
+        Routes a request to the appropriate agent adapter and returns the response.
 
         Args:
-            registration_key: The backend agent's UUID string.
-            request_data: Data for the agent's handle_request method.
+            registration_key: The key used to register the agent (its backend ID).
+            request_data: The data to be sent to the agent.
 
         Returns:
-            Agent's response or an error dictionary.
+            The response from the agent adapter.
+
+        Raises:
+            ValueError: If the agent is not found in the registry.
+            RuntimeError: If the agent's handle_request method fails.
         """
-        logger.info(
-            f"Routing request for agent with registration key: {registration_key}"
+        logger.debug(
+            f"Routing request for agent key: {registration_key}. Request data keys: {list(request_data.keys())}"
         )
         agent_instance = self.get_agent_instance(registration_key)
 
         if not agent_instance:
-            logger.error(f"Could not find agent adapter for key: {registration_key}")
-            return {
-                "error": "AgentNotRegisteredInRouter",
-                "message": f"Agent key '{registration_key}' not in router instances.",
-                "registration_key": registration_key,
-                "status_code": 404,
-            }
+            logger.error(f"Agent not found for key: {registration_key}")
+            raise ValueError(f"Agent not found for key: {registration_key}")
 
         try:
-            response = await agent_instance.handle_request(request_data)
-            logger.info(
-                f"Successfully processed request for agent key '{registration_key}'"
+            # The agent_instance.handle_request is now synchronous
+            response = agent_instance.handle_request(request_data)
+            logger.debug(
+                f"Successfully routed request for agent key: {registration_key}"
             )
             return response
         except Exception as e:
             logger.error(
-                f"Error during request handling by adapter for agent key '{registration_key}': {e}",
+                f"Error handling request for agent {registration_key}: {e}",
                 exc_info=True,
             )
-            return {
-                "error": "RequestHandlingError",
-                "message": (
-                    f"Adapter error for agent key '{registration_key}': {str(e)}"
-                ),
-                "registration_key": registration_key,
-                "status_code": 500,
-            }
+            # Depending on desired error handling, re-raise or return error structure
+            raise RuntimeError(
+                f"Agent {registration_key} failed to handle request: {e}"
+            ) from e

@@ -1,6 +1,5 @@
 from http import HTTPStatus
 from typing import Any, Optional, Union
-from uuid import UUID
 
 import httpx
 
@@ -9,14 +8,10 @@ from ...client import AuthenticatedClient, Client
 from ...types import Response
 
 
-def _get_kwargs(
-    id: UUID,
-) -> dict[str, Any]:
+def _get_kwargs() -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
-        "method": "delete",
-        "url": "/api/prompt/{id}".format(
-            id=id,
-        ),
+        "method": "post",
+        "url": "/api/generator",
     }
 
     return _kwargs
@@ -25,7 +20,7 @@ def _get_kwargs(
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
 ) -> Optional[Any]:
-    if response.status_code == 204:
+    if response.status_code == 200:
         return None
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
@@ -45,14 +40,18 @@ def _build_response(
 
 
 def sync_detailed(
-    id: UUID,
     *,
     client: AuthenticatedClient,
 ) -> Response[Any]:
-    """ViewSet for managing Prompt instances.
-
-    Args:
-        id (UUID):
+    r"""Proxies POST requests to the configured OpenRouter generator model.
+    Requires a valid User API Key for access.
+    The client should send a POST request with a JSON body in the same format
+    as expected by LiteLLM or OpenRouter's /chat/completions endpoint,
+    including a \"model\" field.
+    Note: The \"model\" field provided by the client in the request body will be
+    overridden by the server-configured generator model ID for the actual call to OpenRouter.
+    e.g., {\"model\": \"client_specified_model_name\", \"messages\": [{\"role\": \"user\", \"content\":
+    \"Hello!\"}], \"stream\": False}
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -62,9 +61,7 @@ def sync_detailed(
         Response[Any]
     """
 
-    kwargs = _get_kwargs(
-        id=id,
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -74,14 +71,18 @@ def sync_detailed(
 
 
 async def asyncio_detailed(
-    id: UUID,
     *,
     client: AuthenticatedClient,
 ) -> Response[Any]:
-    """ViewSet for managing Prompt instances.
-
-    Args:
-        id (UUID):
+    r"""Proxies POST requests to the configured OpenRouter generator model.
+    Requires a valid User API Key for access.
+    The client should send a POST request with a JSON body in the same format
+    as expected by LiteLLM or OpenRouter's /chat/completions endpoint,
+    including a \"model\" field.
+    Note: The \"model\" field provided by the client in the request body will be
+    overridden by the server-configured generator model ID for the actual call to OpenRouter.
+    e.g., {\"model\": \"client_specified_model_name\", \"messages\": [{\"role\": \"user\", \"content\":
+    \"Hello!\"}], \"stream\": False}
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -91,9 +92,7 @@ async def asyncio_detailed(
         Response[Any]
     """
 
-    kwargs = _get_kwargs(
-        id=id,
-    )
+    kwargs = _get_kwargs()
 
     response = await client.get_async_httpx_client().request(**kwargs)
 

@@ -212,7 +212,7 @@ class AuthenticatedClient:
     token: str
     raise_on_unexpected_status: bool = field(default=False, kw_only=True)
     _base_url: str = field(
-        default="https://hackagent-webapp-260146888364.europe-west1.run.app/",
+        default="https://hackagent.dev/",
         alias="base_url",
     )
     _cookies: dict[str, str] = field(factory=dict, kw_only=True, alias="cookies")
@@ -232,6 +232,11 @@ class AuthenticatedClient:
 
     prefix: str = "Bearer"
     auth_header_name: str = "Authorization"
+
+    def __attrs_post_init__(self):
+        """Ensure _base_url is set to default if None was explicitly passed."""
+        if self._base_url is None:
+            self._base_url = "https://hackagent.dev/"
 
     def with_headers(self, headers: dict[str, str]) -> "AuthenticatedClient":
         """Get a new client matching this one with additional headers"""

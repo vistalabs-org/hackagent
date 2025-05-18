@@ -85,7 +85,7 @@ def _construct_prompts(
     return formatted_inputs, current_goals, expanded_meta_prefixes
 
 
-async def _generate_prefixes(
+def _generate_prefixes(
     unique_goals: List[str],
     config: Dict,
     logger: logging.Logger,
@@ -206,7 +206,7 @@ async def _generate_prefixes(
                 completion_text = None
                 try:
                     # logger.info(f"Sending request to router for prompt: {current_prompt_text[:100]}...")
-                    response = await router.route_request(
+                    response = router.route_request(
                         registration_key=registration_key,  # type: ignore
                         request_data=request_params,
                     )
@@ -265,7 +265,7 @@ async def _generate_prefixes(
     return results
 
 
-async def execute(
+def execute(
     goals: List[str],
     config: Dict,
     logger: logging.Logger,
@@ -273,34 +273,17 @@ async def execute(
     client: AuthenticatedClient,  # organization_id removed from this call
 ) -> pd.DataFrame:
     """Generate initial prefixes using provided goals via AgentRouter."""
-    logger.info("Executing Step 1: Generating prefixes using AgentRouter")
+    logger.info("Starting Step 1: Generate Prefixes")
 
-    if not goals:
-        logger.warning("Step 1 received no goals. Returning empty DataFrame.")
-        return pd.DataFrame(
-            columns=["goal", "prefix", "meta_prefix", "temperature", "model_name"]
-        )
+    # Ensure goals are unique before processing to avoid redundant API calls
+    unique_goals = list(dict.fromkeys(goals)) if goals else []
 
-    generator = config.get("generator")
-
-    if not generator or not generator.get("identifier"):
-        logger.error(
-            "Step 1: Missing 'generator' or 'identifier' in config. Cannot generate prefixes."
-        )
-        return pd.DataFrame(
-            columns=["goal", "prefix", "meta_prefix", "temperature", "model_name"]
-        )
-
-    model_name_from_config = generator["identifier"]
-    logger.info(
-        f"Generating prefixes for {len(goals)} unique goals using AgentRouter with LiteLLM: {model_name_from_config}"
-    )
-
-    all_results = await _generate_prefixes(
-        unique_goals=goals,
+    # Call the synchronous helper
+    all_results = _generate_prefixes(
+        unique_goals=unique_goals,
         config=config,
         logger=logger,
-        client=client,  # organization_id removed from this call
+        client=client,
     )
 
     if not all_results:
