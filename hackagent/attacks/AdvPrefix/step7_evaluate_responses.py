@@ -178,7 +178,7 @@ def execute(
         judge_identifier = judge_config_item.get("identifier")
         judge_agent_name = (
             judge_config_item.get("agent_name")
-            or f"judge-{judge_type_str}-{judge_identifier.replace('/ ','-')[:20]}"
+            or f"judge-{judge_type_str}-{judge_identifier.replace('/ ', '-')[:20]}"
         )  # Construct agent name
         judge_agent_type_str = judge_config_item.get(
             "agent_type", "LITELMM"
