@@ -1,8 +1,7 @@
 import logging
 import pandas as pd
-from typing import Dict, Any  # Import Dict, Any, Optional
+from typing import Dict, Any, List  # Added List
 import uuid
-import asyncio  # Added for async operations
 
 # --- Import AgentRouter and related components ---
 from hackagent.client import AuthenticatedClient
@@ -37,7 +36,7 @@ REFUSAL_KEYWORDS = [
 # ...
 
 
-async def execute(
+def execute(
     client: AuthenticatedClient,  # Still needed if router methods need it explicitly, or for other calls
     agent_router: AgentRouter,  # The main router for the victim/surrogate
     input_df: pd.DataFrame,
@@ -49,7 +48,7 @@ async def execute(
 ) -> pd.DataFrame:
     """Calculate an 'ADK Acceptability Score' for prefixes using the provided agent_router."""
     logger.info(
-        "Executing Step 4: Computing ADK Acceptability Score (async with passed AgentRouter)"
+        "Executing Step 4: Computing ADK Acceptability Score (sequentially with passed AgentRouter)"
     )
 
     if input_df.empty:
@@ -109,24 +108,44 @@ async def execute(
     )
     df_with_score["prefix_nll"] = df_with_score["prefix_nll"].fillna(float("inf"))
 
-    tasks = []
+    interaction_results_list: List[Dict[str, Any]] = []
+    logger.info(
+        f"Executing {len(input_df)} ADK acceptability scoring requests sequentially..."
+    )
+
+    # Synchronous loop instead of asyncio.gather
     for index, row in input_df.iterrows():
         prefix = row["prefix"]
-        tasks.append(
-            _get_adk_acceptability_via_router(
-                router=agent_router,  # Use the passed router
+        try:
+            result = _get_adk_acceptability_via_router(
+                router=agent_router,
                 agent_reg_key=victim_agent_reg_key,
                 prefix_text=prefix,
                 user_id=step_user_id,
                 session_id=step_session_id,
-                request_timeout=request_timeout,  # Use timeout from config
+                request_timeout=request_timeout,
                 logger_instance=logger,
                 original_index=index,
             )
-        )
+            interaction_results_list.append(result)
+        except Exception as e:
+            logger.error(
+                f"Exception during synchronous ADK acceptability scoring for original index {index}: {e}",
+                exc_info=e,
+            )
+            interaction_results_list.append(
+                {
+                    "score": float("inf"),
+                    "request_payload": None,
+                    "response_status_code": None,
+                    "response_headers": None,
+                    "response_body_raw": None,
+                    "adk_events_list": None,
+                    "error_message": f"Sync Task Exception: {type(e).__name__} - {str(e)}",
+                    "log_message": None,
+                }
+            )
 
-    logger.info(f"Gathering {len(tasks)} ADK acceptability scoring requests...")
-    interaction_results_list = await asyncio.gather(*tasks, return_exceptions=True)
     logger.info("All ADK acceptability scoring requests processed.")
 
     adk_acceptability_scores_col = []
@@ -139,32 +158,17 @@ async def execute(
 
     for i, result_item in enumerate(interaction_results_list):
         original_idx = i
-        if isinstance(result_item, Exception):
-            logger.error(
-                f"Exception during ADK acceptability scoring for original index {original_idx}: {result_item}",
-                exc_info=result_item,
+        adk_acceptability_scores_col.append(result_item["score"])
+        adk_request_payloads_col.append(result_item["request_payload"])
+        adk_response_statuses_col.append(result_item["response_status_code"])
+        adk_response_headers_list_col.append(result_item["response_headers"])
+        adk_response_bodies_raw_col.append(result_item["response_body_raw"])
+        adk_events_lists_col.append(result_item["adk_events_list"])
+        adk_error_messages_col.append(result_item["error_message"])
+        if result_item.get("log_message"):
+            logger.info(
+                f"Note for original index {original_idx} (ADK session {step_session_id}): {result_item['log_message']}"
             )
-            adk_acceptability_scores_col.append(float("inf"))
-            adk_request_payloads_col.append(None)
-            adk_response_statuses_col.append(None)
-            adk_response_headers_list_col.append(None)
-            adk_response_bodies_raw_col.append(None)
-            adk_events_lists_col.append(None)
-            adk_error_messages_col.append(
-                f"Async Task Exception: {type(result_item).__name__} - {str(result_item)}"
-            )
-        else:
-            adk_acceptability_scores_col.append(result_item["score"])
-            adk_request_payloads_col.append(result_item["request_payload"])
-            adk_response_statuses_col.append(result_item["response_status_code"])
-            adk_response_headers_list_col.append(result_item["response_headers"])
-            adk_response_bodies_raw_col.append(result_item["response_body_raw"])
-            adk_events_lists_col.append(result_item["adk_events_list"])
-            adk_error_messages_col.append(result_item["error_message"])
-            if result_item.get("log_message"):
-                logger.info(
-                    f"Note for original index {original_idx} (ADK session {step_session_id}): {result_item['log_message']}"
-                )
 
     num_rows_df = len(df_with_score)
     if len(adk_acceptability_scores_col) != num_rows_df:
@@ -196,7 +200,7 @@ async def execute(
     return df_with_score
 
 
-async def _get_adk_acceptability_via_router(
+def _get_adk_acceptability_via_router(
     router: AgentRouter,
     agent_reg_key: str,
     prefix_text: str,
@@ -237,14 +241,13 @@ async def _get_adk_acceptability_via_router(
 
     request_data = {
         "prompt": prefix_text,
-        "user_id": user_id,
         "session_id": session_id,
         "timeout": request_timeout,
     }
     request_payload_sent = request_data
 
     try:
-        adapter_response = await router.route_request(
+        adapter_response = router.route_request(
             registration_key=agent_reg_key, request_data=request_data
         )
         request_payload_sent = adapter_response.get("raw_request", request_payload_sent)

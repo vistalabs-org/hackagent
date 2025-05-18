@@ -1,8 +1,7 @@
 import logging
 import pandas as pd
-import asyncio
 import uuid
-from typing import Dict, Any, Optional  # Import Dict, Any, List, Optional
+from typing import Dict, Any, Optional, List  # Added List
 
 # --- Import AgentRouter and related components ---
 from hackagent.router.router import AgentRouter, AgentTypeEnum
@@ -19,7 +18,7 @@ SURROGATE_ATTACK_PROMPTS = {
 }
 
 
-async def _get_completion_via_router(
+def _get_completion_via_router(
     agent_router: AgentRouter,
     agent_reg_key: str,
     prefix_text: str,
@@ -92,7 +91,7 @@ async def _get_completion_via_router(
     }
 
     try:
-        adapter_response = await agent_router.route_request(
+        adapter_response = agent_router.route_request(
             registration_key=agent_reg_key, request_data=request_data
         )
         # Update result_dict with actuals from adapter_response
@@ -141,7 +140,7 @@ async def _get_completion_via_router(
     return result_dict
 
 
-async def execute(
+def execute(
     agent_router: AgentRouter,  # The main router for the victim
     input_df: pd.DataFrame,
     config: Dict[str, Any],
@@ -149,7 +148,7 @@ async def execute(
     run_dir: str,
 ) -> pd.DataFrame:
     """Get completions for filtered prefixes using the provided agent_router."""
-    logger.info("Executing Step 6: Getting completions (async with passed AgentRouter)")
+    logger.info("Executing Step 6: Getting completions (synchronously)")
 
     if input_df.empty:
         logger.warning(
@@ -245,127 +244,78 @@ async def execute(
         f"Completion params for Step 6: timeout={request_timeout}, max_tokens={max_new_tokens}, temp={temperature}, n_samples={n_samples_per_prefix}"
     )
 
-    # --- Prepare and run tasks ---
-    tasks = []
-    for index, row in input_df.iterrows():
-        prefix = row["prefix"]
-        if not isinstance(prefix, str) or not prefix.strip():
-            logger.warning(
-                f"Skipping empty or invalid prefix at original index {index}."
-            )
-            # We'll handle adding NAs later when processing results
-            tasks.append(
-                asyncio.create_task(
-                    asyncio.sleep(
-                        0,
-                        result={  # Simulate a failed task for structure
-                            "completion": None,
-                            "error_message": "Empty or invalid prefix",
-                            "original_index": index,
-                            "log_message": f"Skipped empty prefix at index {index}.",
-                        },
-                    )
-                )
-            )
-            continue
+    # --- Prepare and run tasks (synchronously) ---
+    completion_results_list: List[Dict[str, Any]] = []
+    logger.info(f"Executing {len(input_df)} completion requests sequentially...")
 
-        tasks.append(
-            _get_completion_via_router(
+    for index, row in input_df.iterrows():
+        prefix_text = row["prefix"]
+        # 'goal' might not be directly used if surrogate_prompt_template is complex or prefix_text is already combined
+        # goal_text = row.get("goal", "") # Ensure goal is available if needed by prompt construction
+
+        try:
+            # n_samples handling: If n_samples_per_prefix > 1, the _get_completion_via_router (and adapter) needs to support it.
+            # Currently, it makes one call per row in input_df. If input_df is already expanded for samples, this is fine.
+            # If input_df has one row per unique prefix, and n_samples_per_prefix > 1, this loop needs to run n_samples_per_prefix times
+            # or _get_completion_via_router must handle requesting n_samples from the adapter.
+            # Assuming input_df might be pre-expanded or n_samples=1 for this synchronous version for simplicity.
+            # If n_samples > 1 and not pre-expanded, this will only get 1 sample per prefix.
+            result = _get_completion_via_router(
                 agent_router=agent_router,
                 agent_reg_key=victim_agent_reg_key,
-                prefix_text=prefix,
+                prefix_text=prefix_text,
                 surrogate_prompt_template=actual_surrogate_prompt_str,
                 user_id=step_user_id_adk,
                 session_id=step_session_id_adk,
                 request_timeout=request_timeout,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
-                n_samples=n_samples_per_prefix,
+                n_samples=1,  # Forcing 1 for this simple loop; adapter might take n_samples_per_prefix
                 logger_instance=logger,
-                original_index=index,  # Pass original index for logging/mapping
+                original_index=index,
             )
-        )
-
-    logger.info(f"Gathering {len(tasks)} completion requests for Step 6...")
-    interaction_results_list = await asyncio.gather(*tasks, return_exceptions=True)
-    logger.info("All completion requests processed for Step 6.")
-
-    # --- Process results and update DataFrame ---
-    # Initialize columns for all results, using pd.NA for missing values
-    completions_col = [pd.NA] * len(input_df)
-    s6_req_payload_col = [pd.NA] * len(input_df)
-    s6_resp_status_col = [pd.NA] * len(input_df)
-    s6_resp_headers_col = [pd.NA] * len(input_df)
-    s6_resp_body_col = [pd.NA] * len(input_df)
-    s6_events_col = [pd.NA] * len(input_df)
-    s6_error_col = [pd.NA] * len(input_df)
-
-    for i, result_item_or_exc in enumerate(interaction_results_list):
-        # Determine original index: if task was skipped, original_index is in result_item_or_exc
-        # Otherwise, tasks were added in order of input_df.
-        # For robustness, if result_item_or_exc is a dict and has 'original_index', use it.
-        # This assumes tasks list corresponds 1:1 with input_df rows OR skipped tasks pass original_index.
-        # The current loop for creating tasks iterates input_df, so 'i' should map correctly unless there were skips.
-        # The 'original_index' field in the result dict is the most reliable.
-
-        original_idx = -1  # Default to invalid
-        current_log_message_for_df_update = None
-
-        if isinstance(result_item_or_exc, Exception):
+            completion_results_list.append(result)
+        except Exception as e:
             logger.error(
-                f"Async task {i} failed with exception: {result_item_or_exc}",
-                exc_info=result_item_or_exc,
+                f"Exception during synchronous completion for original index {index}: {e}",
+                exc_info=e,
             )
-            # Try to find original_index if possible (e.g. if exception was wrapped)
-            # This part is tricky if the original_index isn't propagated with the raw exception.
-            # For now, assume 'i' maps to input_df index for exceptions not from our helper.
-            original_idx = i  # Fallback: use loop index
-            if (
-                hasattr(result_item_or_exc, "__cause__")
-                and isinstance(getattr(result_item_or_exc, "__cause__"), dict)
-                and "original_index" in getattr(result_item_or_exc, "__cause__")
-            ):
-                original_idx = getattr(result_item_or_exc, "__cause__")[
-                    "original_index"
-                ]
-
-            if 0 <= original_idx < len(input_df):
-                s6_error_col[original_idx] = (
-                    f"Async Task Exception: {type(result_item_or_exc).__name__} - {str(result_item_or_exc)}"
-                )
-            else:
-                logger.error(f"Could not map exception for task {i} to DataFrame row.")
-            continue  # Skip to next result
-
-        # If it's a dict, it's from our helper or a skipped task placeholder
-        result_item = result_item_or_exc
-        original_idx = result_item.get(
-            "original_index", i
-        )  # Use 'original_index' if present
-
-        if not (0 <= original_idx < len(input_df)):
-            logger.error(
-                f"Result item for task {i} has invalid original_index {original_idx}. Skipping."
-            )
-            continue
-
-        current_log_message_for_df_update = result_item.get("log_message")
-        if current_log_message_for_df_update:
-            logger.info(
-                f"Log for original index {original_idx} (ADK session: {step_session_id_adk if victim_agent_type == AgentTypeEnum.GOOGLE_ADK else 'N/A'}): {current_log_message_for_df_update}"
+            completion_results_list.append(
+                {
+                    "completion": None,
+                    "raw_request_payload": None,
+                    "raw_response_status": None,
+                    "raw_response_headers": None,
+                    "raw_response_body": None,
+                    "adapter_specific_events": None,
+                    "error_message": f"Sync Task Exception: {type(e).__name__} - {str(e)}",
+                    "log_message": None,
+                }
             )
 
-        completions_col[original_idx] = result_item.get("completion")
-        s6_req_payload_col[original_idx] = result_item.get("raw_request_payload")
-        s6_resp_status_col[original_idx] = result_item.get("raw_response_status")
-        s6_resp_headers_col[original_idx] = result_item.get("raw_response_headers")
-        s6_resp_body_col[original_idx] = result_item.get("raw_response_body")
-        s6_events_col[original_idx] = result_item.get("adapter_specific_events")
-        s6_error_col[original_idx] = result_item.get("error_message")
+    logger.info("All completion requests processed.")
+
+    # Initialize columns for results
+    s6_completions_col = []
+    s6_req_payload_col = []
+    s6_resp_status_col = []
+    s6_resp_headers_col = []
+    s6_resp_body_col = []
+    s6_events_col = []
+    s6_error_col = []
+
+    for result in completion_results_list:
+        s6_completions_col.append(result.get("completion"))
+        s6_req_payload_col.append(result.get("raw_request_payload"))
+        s6_resp_status_col.append(result.get("raw_response_status"))
+        s6_resp_headers_col.append(result.get("raw_response_headers"))
+        s6_resp_body_col.append(result.get("raw_response_body"))
+        s6_events_col.append(result.get("adapter_specific_events"))
+        s6_error_col.append(result.get("error_message"))
 
     # Assign new columns to the DataFrame
     output_df = input_df.copy()
-    output_df["completion"] = completions_col
+    output_df["completion"] = s6_completions_col
     output_df["s6_raw_request_payload"] = s6_req_payload_col
     output_df["s6_raw_response_status"] = s6_resp_status_col
     output_df["s6_raw_response_headers"] = s6_resp_headers_col

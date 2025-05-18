@@ -6,6 +6,7 @@ import os  # Added for path joining
 import httpx  # Added for manual HTTP call in AdvPrefix
 from http import HTTPStatus  # Added for checking 201 status
 from typing import Any, Optional, List, Dict, Tuple, TYPE_CHECKING
+from uuid import UUID  # Added import
 
 # Imports for specific strategies, moved from agent.py or direct_test_executor.py
 from hackagent import errors  # Import the errors module
@@ -257,8 +258,8 @@ class AdvPrefix(AttackStrategy):
 
     def _create_server_attack_record(
         self,
-        victim_agent_id: str,
-        organization_id: str,
+        victim_agent_id: UUID,
+        organization_id: UUID,
         attack_config: Dict[str, Any],  # Used for summary
     ) -> str:
         """Creates the Attack record on the server and returns the attack_id."""
@@ -267,8 +268,8 @@ class AdvPrefix(AttackStrategy):
 
         payload = {
             "type": attack_type,
-            "agent": victim_agent_id,
-            "organization": organization_id,
+            "agent": str(victim_agent_id),  # Convert UUID to string
+            "organization": str(organization_id),  # Convert UUID to string
             "configuration": attack_config,
         }
         try:
@@ -407,44 +408,99 @@ class AdvPrefix(AttackStrategy):
     ) -> Dict[str, Any]:
         """Prepares the configuration for the local AdvPrefixAttack."""
         logger.debug(f"Preparing local attack config for Run ID: {run_id}")
-        current_config = json.loads(json.dumps(attack_config))  # Deep copy
+        # Deep copy the user-provided attack_config to avoid modifying it directly.
+        prepared_config = json.loads(json.dumps(attack_config))
 
-        original_run_id = current_config.get("run_id")
-        current_config["run_id"] = run_id
-        if original_run_id and original_run_id != run_id:
+        # Explicitly set/override 'run_id' with the server-generated run_id.
+        # This 'run_id' will be used by AdvPrefixAttack to initialize its self.run_id.
+        original_config_run_id = prepared_config.get("run_id")
+        prepared_config["run_id"] = run_id
+        if original_config_run_id and original_config_run_id != run_id:
             logger.info(
-                f"Updated 'run_id' in attack_config from '{original_run_id}' to server Run ID '{run_id}'."
+                f"Overriding 'run_id' in attack_config from '{original_config_run_id}' to server Run ID '{run_id}' for AdvPrefixAttack."
             )
-        elif not original_run_id:
-            logger.info(f"Set 'run_id' in attack_config to server Run ID '{run_id}'.")
+        elif not original_config_run_id:
+            logger.info(
+                f"Set 'run_id' in attack_config to server Run ID '{run_id}' for AdvPrefixAttack."
+            )
 
-        if "output_dir" not in current_config:
-            current_config["output_dir"] = f"./hackagent_local_runs/{attack_id}"
+        # Update with other necessary parameters for AdvPrefixAttack
+        prepared_config.update(
+            {
+                "hackagent_client": self.client,
+                "agent_router": self.hack_agent.router,
+                # "initial_run_id": run_id, # This is no longer needed as AdvPrefixAttack.run will use self.run_id
+                "attack_id": attack_id,
+            }
+        )
+
+        # Ensure 'output_dir' is present, defaulting if necessary.
+        # AdvPrefixAttack uses this with its self.run_id to create self.run_dir.
+        if "output_dir" not in prepared_config:
+            # Defaulting output_dir based on attack_id if not provided.
+            # Note: AdvPrefixAttack's __init__ also has a similar output_dir join with its self.run_id.
+            # This path is more of a base for where AdvPrefixAttack will create its specific run_id subdir.
+            prepared_config["output_dir"] = f"./logs/runs/{attack_id}"
             logger.warning(
-                f"'output_dir' not in attack_config, defaulting to {current_config['output_dir']}"
+                f"'output_dir' not in attack_config for AdvPrefixAttack, defaulting to {prepared_config['output_dir']}"
             )
 
-        return current_config
+        return prepared_config
 
-    async def _execute_local_prefix_attack(
+    def _execute_local_prefix_attack(
         self,
         attack_config: Dict[str, Any],
         goals: List[Any],
-        run_id: str,  # For logging and potentially for the attack runner
-        attack_id: str,  # For logging
+        run_id: str,  # Server run_id
+        attack_id: str,
     ) -> Optional[pd.DataFrame]:
         """Executes the AdvPrefixAttack locally."""
         logger.info(
-            f"Starting local AdvPrefixAttack for Attack ID {attack_id} (Run ID: {run_id})..."
+            f"Executing local prefix attack for Attack ID {attack_id}, Server Run ID {run_id}."
         )
-        runner = AdvPrefixAttack(
-            config=attack_config,
-            client=self.hack_agent.client,  # Pass existing client
-            agent_router=self.hack_agent.router,  # Pass main victim router
-        )
-        results_df = await runner.run(goals=goals, initial_run_id=run_id)
-        logger.info(f"Local AdvPrefixAttack completed for Attack ID {attack_id}.")
-        return results_df
+        try:
+            # runner_config from _prepare_attack_config is a flat dictionary
+            # containing pipeline params, client object, and router object.
+            flat_prepared_config = self._prepare_attack_config(
+                attack_config, run_id, attack_id
+            )
+
+            # Extract the client and router objects that AdvPrefixAttack expects as direct arguments.
+            # The key for the client object in flat_prepared_config is "hackagent_client".
+            adv_prefix_client = flat_prepared_config.pop("hackagent_client")
+            adv_prefix_router = flat_prepared_config.pop("agent_router")
+
+            # Remove other keys that are not part of AdvPrefixAttack's 'config' dictionary
+            # or were passed for strategy-level logic but not for AdvPrefixAttack.__init__.
+            flat_prepared_config.pop(
+                "attack_type", None
+            )  # Already handled if in original attack_config
+            flat_prepared_config.pop(
+                "goals", None
+            )  # Already handled if in original attack_config
+
+            # The remaining flat_prepared_config is now the dictionary
+            # that AdvPrefixAttack expects for its 'config' parameter.
+            # This dictionary includes user's settings, run_id, attack_id, output_dir etc.
+
+            runner = AdvPrefixAttack(
+                config=flat_prepared_config,
+                client=adv_prefix_client,
+                agent_router=adv_prefix_router,
+            )
+
+            # AdvPrefixAttack.run will use its self.run_id, which is initialized from runner_config["run_id"].
+            results_df = runner.run(goals=goals)  # No longer pass initial_run_id
+            logger.info(
+                f"Local prefix attack completed for Attack ID {attack_id}, Server Run ID {run_id}."
+            )
+            return results_df
+        except Exception as e:
+            logger.error(
+                f"Error during local prefix attack execution for Attack ID {attack_id}, Server Run ID {run_id}: {e}",
+                exc_info=True,
+            )
+            return None  # Or re-raise if appropriate for the calling context
 
     def _log_local_run_persistence_info(
         self,
@@ -476,64 +532,71 @@ class AdvPrefix(AttackStrategy):
                 # For now, just log and continue, but could raise if this setup was critical.
                 pass
 
-    async def execute(
+    def execute(
         self,
         attack_config: Dict[str, Any],
         run_config_override: Optional[Dict[str, Any]],
         fail_on_run_error: bool,
     ) -> Any:
-        logger.info("Executing AdvPrefix.")
-        router = self.hack_agent.router
-        attack_id_str: Optional[str] = None
+        """
+        Executes the AdvPrefix attack.
+        This involves:
+        1. Creating an Attack record on the server.
+        2. Creating a Run record on the server associated with the Attack.
+        3. Executing the local AdvPrefix logic (e.g., notebook steps).
+        4. Potentially updating the server Run/Attack with results or status.
+        """
+        victim_agent_id: UUID = self.hack_agent.router.backend_agent.id
+        organization_id: UUID = self.hack_agent.router.organization_id
 
-        try:
-            goals = self._prepare_and_validate_attack_params(attack_config)
-
-            attack_id_str = self._create_server_attack_record(
-                victim_agent_id=str(router.backend_agent.id),
-                organization_id=str(router.organization_id),
-                attack_config=attack_config,
+        if not victim_agent_id or not organization_id:
+            raise HackAgentError(
+                "Victim agent ID or Organization ID is not available. Ensure agent is initialized."
             )
 
-            run_id_for_local_ops = self._create_server_run_record(
-                attack_id=attack_id_str,
-                victim_agent_id=str(router.backend_agent.id),
-                run_config_override=run_config_override,
+        # 1. Create Attack record on the server
+        attack_id = self._create_server_attack_record(
+            victim_agent_id=victim_agent_id,
+            organization_id=organization_id,
+            attack_config=attack_config,  # Pass for summary or details
+        )
+        logger.info(f"AdvPrefix server Attack record created with ID: {attack_id}")
+
+        # 2. Create Run record on the server
+        run_id = self._create_server_run_record(
+            attack_id=attack_id,
+            victim_agent_id=victim_agent_id,
+            run_config_override=run_config_override,
+        )
+        logger.info(
+            f"AdvPrefix server Run record created with ID: {run_id} for Attack ID: {attack_id}"
+        )
+
+        # 3. Execute the local AdvPrefix attack logic
+        goals = attack_config.get("goals")
+        if not goals:
+            raise ValueError("AdvPrefix attack requires 'goals' in attack_config.")
+
+        # Assuming _execute_local_prefix_attack is now synchronous
+        local_results_df = self._execute_local_prefix_attack(
+            attack_config=attack_config, goals=goals, run_id=run_id, attack_id=attack_id
+        )
+
+        # 4. Log persistence info (which internally might update server records)
+        # This step might be expanded to explicitly update server records if needed.
+        self._log_local_run_persistence_info(
+            attack_config, attack_id, run_id, fail_on_run_error
+        )
+
+        if local_results_df is None and fail_on_run_error:
+            raise HackAgentError(
+                f"AdvPrefix local execution failed for Attack ID {attack_id} and Run ID {run_id}."
             )
 
-            current_attack_config = self._prepare_attack_config(
-                attack_config=attack_config,
-                run_id=run_id_for_local_ops,
-                attack_id=attack_id_str,
-            )
-
-            local_results_df = await self._execute_local_prefix_attack(
-                attack_config=current_attack_config,
-                goals=goals,
-                run_id=run_id_for_local_ops,
-                attack_id=attack_id_str,
-            )
-
-            self._log_local_run_persistence_info(
-                attack_config=current_attack_config,
-                attack_id=attack_id_str,
-                run_id=run_id_for_local_ops,
-                fail_on_run_error=fail_on_run_error,
-            )
-
-            return local_results_df  # Return the DataFrame as per original behavior
-
-        except Exception as e:
-            log_attack_id = attack_id_str or "PRE-ATTACK_CREATION"
-            logger.error(
-                f"Error in AdvPrefix for Attack ID '{log_attack_id}': {e}",
-                exc_info=True,
-            )
-            if fail_on_run_error:
-                raise HackAgentError(
-                    f"AdvPrefix failed for Attack ID {log_attack_id}: {e}"
-                ) from e
-            return None  # Return None if not failing on error and an error occurred
+        logger.info(f"AdvPrefix attack execution completed for Attack ID {attack_id}.")
+        # Return the DataFrame from the local execution as the primary result for now.
+        # Future: Might return a more comprehensive result object or the server Run object.
+        return local_results_df
 
 
 # --- End Strategy Pattern ---

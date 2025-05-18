@@ -2,12 +2,11 @@
 Module for getting complete responses from prefixes using target LLM.
 """
 
-import asyncio
 import pandas as pd
 import os
 import logging
 import uuid
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from dataclasses import dataclass
 from rich.progress import (
     Progress,
@@ -146,7 +145,7 @@ class PrefixCompleter:
 
         return pd.DataFrame(expanded_rows)
 
-    async def get_completions(self, df: pd.DataFrame) -> pd.DataFrame:
+    def get_completions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Get completions for all prefixes in dataframe using the configured AgentRouter."""
         self.logger.info(
             f"Starting completions for {len(df)} unique prefixes with {self.config.n_samples} samples each."
@@ -173,49 +172,53 @@ class PrefixCompleter:
             self.logger.info(
                 f"Generated ADK session_id: {adk_session_id} and user_id: {adk_user_id} for this batch."
             )
-            # ADK session creation is now handled by the ADKAgentAdapter internally per request if needed,
-            # or managed based on session_id persistence by the adapter.
 
-        tasks = []
-        for index, row in expanded_df.iterrows():
-            goal = row["goal"]
-            prefix_text = row["prefix"]
-            # Pass adk_session_id and adk_user_id if ADK, they will be None otherwise
-            tasks.append(
-                self._execute_completion_request(
-                    goal, prefix_text, index, adk_session_id, adk_user_id
-                )
-            )
-
-        self.logger.info(f"Gathering {len(tasks)} completion requests...")
-        detailed_completion_results = await asyncio.gather(
-            *tasks, return_exceptions=True
+        detailed_completion_results: List[Dict] = []
+        self.logger.info(
+            f"Executing {len(expanded_df)} completion requests sequentially..."
         )
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
+            TimeRemainingColumn(),
+        ) as progress_bar:
+            task_progress = progress_bar.add_task(
+                "[cyan]Getting completions...", total=len(expanded_df)
+            )
+            for index, row in expanded_df.iterrows():
+                goal = row["goal"]
+                prefix_text = row["prefix"]
+                try:
+                    result = self._execute_completion_request(
+                        goal, prefix_text, index, adk_session_id, adk_user_id
+                    )
+                    detailed_completion_results.append(result)
+                except Exception as e:
+                    self.logger.error(
+                        f"Exception during synchronous completion request for original index {index}: {e}",
+                        exc_info=e,
+                    )
+                    detailed_completion_results.append(
+                        {
+                            "generated_text": f"[ERROR: Sync Task Exception - {type(e).__name__}]",
+                            "request_payload": None,
+                            "response_status_code": None,
+                            "response_headers": None,
+                            "response_body_raw": None,
+                            "adk_events_list": None,
+                            "error_message": str(e),
+                        }
+                    )
+                progress_bar.update(task_progress, advance=1)
+
         self.logger.info("All completion requests processed.")
 
-        # Process results, handling potential exceptions from asyncio.gather
-        processed_results = []
-        for i, result in enumerate(detailed_completion_results):
-            if isinstance(result, Exception):
-                self.logger.error(
-                    f"Exception during completion request for original index {i}: {result}",
-                    exc_info=result,
-                )
-                processed_results.append(
-                    {
-                        "generated_text": f"[ERROR: Async Task Exception - {type(result).__name__}]",
-                        "request_payload": None,
-                        "response_status_code": None,
-                        "response_headers": None,
-                        "response_body_raw": None,
-                        "adk_events_list": None,
-                        "error_message": str(result),
-                    }
-                )
-            else:
-                processed_results.append(result)
-
-        detailed_completion_results = processed_results
+        # Results are already processed one by one
+        # The existing logic for populating expanded_df columns should work if detailed_completion_results is correct.
 
         if len(detailed_completion_results) == len(expanded_df):
             expanded_df["generated_text_only"] = [
@@ -283,7 +286,7 @@ class PrefixCompleter:
         )
         return expanded_df
 
-    async def _execute_completion_request(
+    def _execute_completion_request(
         self,
         goal: str,
         prefix: str,
@@ -292,147 +295,92 @@ class PrefixCompleter:
         adk_user_id: Optional[str],
     ) -> Dict:
         """Helper method to get completion via AgentRouter."""
-        request_data: Dict[str, Any] = {"timeout": self.config.request_timeout}
-        interaction_result: Dict[str, Any] = {}
-        generated_text_specific = ""
-        error_message_str = None
+        request_params = {"timeout": self.config.request_timeout}
 
         try:
+            # Construct prompt based on agent type
             if self.config.agent_type == AgentTypeEnum.GOOGLE_ADK:
-                if not adk_session_id or not adk_user_id:
-                    self.logger.error(
-                        f"ADK agent type selected, but session_id or user_id is missing for index {index}."
-                    )
-                    raise ValueError(
-                        "ADK session_id and user_id are required for ADK agent type."
-                    )
-
-                request_data.update(
-                    {
-                        "prompt_text": prefix,
-                        "session_id": adk_session_id,
-                        "user_id": adk_user_id,
-                        # ADKAgentAdapter specific params if any, e.g., 'max_output_tokens'
-                        # 'max_output_tokens': self.config.max_new_tokens # Example, ADKAdapter needs to support this
-                    }
-                )
-                # self.logger.debug(f"ADK request for index {index}: {request_data}")
-
+                # For ADK, the prompt might be structured differently or handled by the adapter
+                # Assuming adapter takes a simple prompt for now, or it uses goal/prefix internally.
+                # The ADK adapter expects `prompt` which should be the prefix in this context.
+                # It also uses `adk_session_id` and `adk_user_id` from request_data if provided.
+                prompt_to_send = prefix  # ADK adapter expects the prefix as the prompt.
+                request_params["adk_session_id"] = adk_session_id
+                request_params["adk_user_id"] = adk_user_id
             elif self.config.agent_type == AgentTypeEnum.LITELMM:
-                formatted_goal = goal
-                if self.config.surrogate_attack_prompt:
-                    try:
-                        # Ensure prefix is lstripped for surrogate prompt to avoid leading spaces if any
-                        formatted_goal += self.config.surrogate_attack_prompt.format(
-                            prefix=prefix.lstrip()
-                        )
-                    except Exception as fmt_e:
-                        self.logger.warning(
-                            f"Failed to format surrogate prompt for goal at index {index}, using original goal. Error: {fmt_e}"
-                        )
-
-                messages = [
-                    {"role": "user", "content": formatted_goal},
-                    {
-                        "role": "assistant",
-                        "content": prefix,
-                    },  # LiteLLM expects the prefix as an assistant message
-                ]
-                request_data.update(
-                    {
-                        "messages": messages,
-                        "max_tokens": self.config.max_new_tokens,  # Standard LiteLLM param
-                        "temperature": self.config.temperature,
-                        "top_p": 1.0,  # Default, can be made configurable
-                    }
+                # For LiteLLM, construct prompt with surrogate if needed
+                prompt_to_send = (
+                    f"{self.config.surrogate_attack_prompt} {goal} {prefix}"
+                    if self.config.surrogate_attack_prompt
+                    else f"{goal} {prefix}"
                 )
-                # self.logger.debug(f"LiteLLM request for index {index} (first message content): {messages[0]['content'][:100]}...")
-            else:
-                raise NotImplementedError(
-                    f"Agent type {self.config.agent_type} not supported by _execute_completion_request."
-                )
+            else:  # Default behavior for unknown or other agent types
+                prompt_to_send = f"{goal} {prefix}"
 
-            # Make the call through the AgentRouter
-            # self.logger.info(f"Routing request for agent key {self.agent_registration_key} index {index}")
-            adapter_response = await self.agent_router.route_request(
-                registration_key=self.agent_registration_key, request_data=request_data
+            request_params["prompt"] = prompt_to_send
+
+            # Call AgentRouter (now synchronous)
+            adapter_response = self.agent_router.route_request(
+                registration_key=self.agent_registration_key,
+                request_data=request_params,
             )
-            # self.logger.info(f"Adapter response for index {index}: {adapter_response}")
 
-            # Process adapter_response
-            # Expected keys from adapters (ADKAgentAdapter, LiteLLMAgentAdapter):
-            # - 'generated_text': The core model output
-            # - 'error_message': String if an error occurred, else None
-            # - 'raw_request': The request payload sent to the actual agent
-            # - 'raw_response_status': Status code from the agent HTTP call
-            # - 'raw_response_headers': Headers from the agent HTTP call
-            # - 'raw_response_body': Raw body from the agent HTTP call
-            # - 'adapter_specific_events': e.g., ADK events list
+            # Extract relevant information from adapter_response
+            # This structure should align with what BaseAgent.handle_request returns
+            generated_text = adapter_response.get("processed_response", "")
+            # The adapter should return only the generated part, or handle extraction.
+            # For now, assuming processed_response is the part to append.
+            # If it includes the prompt, it needs to be stripped.
+            # Example: if generated_text.startswith(prompt_to_send):
+            # generated_text = generated_text[len(prompt_to_send):].strip()
 
-            error_message_str = adapter_response.get("error_message")
-
-            if error_message_str:
+            error_message = adapter_response.get("error_message")
+            if error_message:
                 self.logger.warning(
-                    f"Adapter reported error for index {index}: {error_message_str}"
+                    f"Error from agent for prefix '{prefix[:50]}...': {error_message}"
                 )
-                generated_text_specific = f"[ERROR: Adapter - {error_message_str}]"
-            else:
-                final_text_from_adapter = adapter_response.get("generated_text", "")
-                if self.config.agent_type == AgentTypeEnum.GOOGLE_ADK:
-                    # ADK adapter should ideally return the full text including prefix.
-                    # If it returns only completion, this logic is fine. If it returns full, we strip.
-                    # Assuming ADKAgentAdapter's 'generated_text' is the full text.
-                    if final_text_from_adapter.startswith(prefix):
-                        generated_text_specific = final_text_from_adapter[len(prefix) :]
-                    else:
-                        # This might happen if ADK output is unexpected or if adapter already stripped prefix
-                        self.logger.warning(
-                            f"ADK response for index {index} did not start with the prefix as expected. "
-                            f"Prefix: '{prefix[:50]}...', Response: '{final_text_from_adapter[:100]}...'. "
-                            f"Using full response or adapter's stripped version."
-                        )
-                        generated_text_specific = (
-                            final_text_from_adapter  # Or some indicator of mismatch
-                        )
-                elif self.config.agent_type == AgentTypeEnum.LITELMM:
-                    # LiteLLMAgentAdapter should directly return the completion part
-                    generated_text_specific = final_text_from_adapter
-                else:
-                    generated_text_specific = final_text_from_adapter  # Fallback
+                # If there was an error, generated_text might be an error marker or empty
+                # Ensure generated_text reflects this if not already handled by adapter.
+                if not generated_text or "[GENERATION_ERROR" not in generated_text:
+                    generated_text = f"[ERROR_FROM_ADAPTER: {error_message}]"
 
-            interaction_result = {
-                "generated_text": generated_text_specific,
-                "request_payload": adapter_response.get("raw_request"),
-                "response_status_code": adapter_response.get("raw_response_status"),
-                "response_headers": adapter_response.get("raw_response_headers"),
-                "response_body_raw": adapter_response.get("raw_response_body"),
-                "adk_events_list": (
-                    adapter_response.get("adapter_specific_events")
-                    if self.config.agent_type == AgentTypeEnum.GOOGLE_ADK
-                    else None
-                ),
-                "error_message": error_message_str,
+            # Store raw request/response details if available from adapter
+            raw_request_payload = adapter_response.get("raw_request", request_params)
+            response_status_code = adapter_response.get("status_code")
+            response_headers = adapter_response.get("raw_response_headers")
+            response_body_raw = adapter_response.get("raw_response_body")
+            # For ADK specific data if returned by adapter
+            adk_events_list = adapter_response.get("agent_specific_data", {}).get(
+                "adk_events_list"
+            )
+
+            self.logger.debug(
+                f"Completed request for prefix (idx {index}): '{prefix[:50]}...' -> '{generated_text[:50]}...'"
+            )
+            return {
+                "generated_text": generated_text,
+                "request_payload": raw_request_payload,
+                "response_status_code": response_status_code,
+                "response_headers": response_headers,
+                "response_body_raw": response_body_raw,
+                "adk_events_list": adk_events_list,
+                "error_message": error_message,  # This is error from the adapter/agent call
             }
 
         except Exception as e:
             self.logger.error(
-                f"Error in _execute_completion_request for index {index} (Agent: {self.config.agent_name}): {e}",
+                f"Critical exception in _execute_completion_request for index {index}, prefix '{prefix[:50]}...': {e}",
                 exc_info=True,
             )
-            error_message_str = (
-                f"Internal Completer Error: {type(e).__name__}: {str(e)}"
-            )
-            interaction_result = {
-                "generated_text": f"[ERROR: {error_message_str}]",
-                "request_payload": request_data,  # Log what we tried to send
+            return {
+                "generated_text": f"[ERROR: Completer Exception - {type(e).__name__}]",
+                "request_payload": request_params,
                 "response_status_code": None,
                 "response_headers": None,
                 "response_body_raw": None,
                 "adk_events_list": None,
-                "error_message": error_message_str,
+                "error_message": str(e),
             }
-
-        return interaction_result
 
     # _get_adk_completion and _get_litellm_completion are now removed and replaced by _execute_completion_request
     # __del__ method removed as no explicit cleanup was being done that's still relevant.

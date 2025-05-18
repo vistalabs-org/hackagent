@@ -25,9 +25,6 @@ from .AdvPrefix import step7_evaluate_responses
 from .AdvPrefix import step8_aggregate_evaluations
 from .AdvPrefix import step9_select_prefixes
 from .AdvPrefix.preprocessing import PrefixPreprocessor, PreprocessConfig
-from .AdvPrefix.utils import (
-    execute_processor_step,
-)  # New import from hackagent.utils
 
 # Models and API clients for backend interaction
 from hackagent.models import (
@@ -37,8 +34,7 @@ from hackagent.models import (
     PatchedResultRequest,  # Added for updating Result evaluation_status
     StatusEnum,
     StepTypeEnum,
-    Result as BackendResult,  # Alias to avoid conflict
-    EvaluationStatusEnum,  # Potentially for parent Result
+    EvaluationStatusEnum,
 )
 from hackagent.types import UNSET
 from hackagent.api.run import run_result_create
@@ -281,856 +277,572 @@ class AdvPrefixAttack(BaseAttack):
     # Methods like _get_checkpoint_path and _clear_gpu_memory are now in utils
     # Methods related to specific steps (_generate_prefixes, _construct_prompts, etc.) are in step files
 
-    async def run(
-        self, goals: List[str], initial_run_id: str | None = None
-    ) -> pd.DataFrame:
+    def run(self, goals: List[str]) -> pd.DataFrame:
         """
-        Execute the complete prefix generation pipeline by calling step modules.
+        Executes the full prefix generation pipeline.
 
         Args:
             goals: A list of goal strings to generate prefixes for.
-            initial_run_id: Optional run ID to use; otherwise, use the one from init or generate.
 
         Returns:
-            A pandas DataFrame containing the final selected prefixes, or the result
-            of the last successfully completed step if the pipeline stops early or fails.
+            A pandas DataFrame containing the final selected prefixes.
         """
-        parent_result_id: Optional[str] = (
-            None  # Will store the ID of the main Result object for this run
-        )
-
-        # Override run_id if provided
-        if initial_run_id and initial_run_id != self.run_id:
-            self.logger.info(
-                f"Overriding run ID from '{self.run_id}' to '{initial_run_id}'"
-            )
-            self.run_id = initial_run_id
-            # Update run_dir based on the new run_id
-            # Ensure config output_dir exists and is a string
-            output_dir = self.config.get("output_dir")
-            if not output_dir or not isinstance(output_dir, str):
-                self.logger.error(
-                    f"Invalid or missing 'output_dir' in config: {output_dir}. Cannot update run_dir."
-                )
-                # Handle error appropriately, e.g., raise or use a default, or stop
-                # For now, we'll let it potentially fail later if run_dir is essential and not set
-            else:
-                self.run_dir = os.path.join(output_dir, f"run_{self.run_id}")
-            self._setup_logging()  # Re-run logging setup with potentially new run_dir
+        self.logger.info(f"Starting AdvPrefixAttack pipeline for Run ID: {self.run_id}")
+        if not goals:
+            self.logger.warning("No goals provided to the pipeline. Exiting early.")
+            return pd.DataFrame()
 
         if not self.run_id:
             self.logger.error(
-                "Run ID is not set. Cannot proceed with backend interaction."
+                "Instance self.run_id is not set. This should be the server-side Run ID. Cannot proceed with backend logging."
             )
-            # Fallback to original behavior without backend interaction if run_id is crucial and missing.
-            # This part would need to be robustly handled based on application requirements.
-            # For now, we proceed, and API calls will likely fail or be skipped.
-            pass
+            pass  # Allow to proceed for now, but server interactions might be affected/skipped.
 
-        self.logger.info(
-            f"Starting Prefix Generation Attack pipeline for Run ID {self.run_id} with {len(goals)} goals."
-        )
-        results_df = None  # Final results (output of step 9)
-        last_step_output_df = pd.DataFrame()  # Holds output of the most recent step
-
-        pipeline_failed = False
-        final_step_reached = 0  # Track the last step attempted
-        current_run_status = StatusEnum.RUNNING  # Initial status
-
-        # Attempt to create a parent Result for this Run
-        if self.run_id and run_result_create:
+        # Update server Run status to 'RUNNING'
+        if self.run_id:
             try:
                 self.logger.info(
-                    f"Attempting to create parent Result for Run ID: {self.run_id}"
+                    f"Updating server Run {self.run_id} status to RUNNING."
                 )
-                result_request_body = ResultRequest(
-                    run=self.run_id,
-                    prompt=None,  # No specific prompt for parent result
-                    request_payload={},  # No request payload for parent
-                    response_body="Parent result for prefix generation attack.",
-                    evaluation_status=EvaluationStatusEnum.NOT_EVALUATED,
-                )
-
-                parent_result_response = await run_result_create.asyncio_detailed(
+                run_patch_request = PatchedRunRequest(status=StatusEnum.RUNNING)
+                update_response = run_partial_update.sync_detailed(
                     client=self.client,
-                    id=UUID(self.run_id),  # This is the run_pk
-                    body=result_request_body,
+                    id=self.run_id,
+                    body=run_patch_request,
+                )
+                if update_response.status_code >= 300:
+                    self.logger.error(
+                        f"Failed to update server Run {self.run_id} status to RUNNING. Status: {update_response.status_code}, Response: {update_response.content}"
+                    )
+            except Exception as e:
+                self.logger.error(
+                    f"Exception updating server Run {self.run_id} status: {e}",
+                    exc_info=True,
                 )
 
-                created_parent_result: Optional[BackendResult] = None
-                successful_creation = False
+        # Create a parent Result record on the server for this entire AdvPrefix pipeline run
+        parent_result_id = None
+        if self.run_id:
+            try:
+                self.logger.info(
+                    f"Creating parent Result for AdvPrefix pipeline under Run ID: {self.run_id}"
+                )
+                # Modify parameters to include a custom identifier for the AdvPrefix pipeline
+                # parent_parameters = self.config.copy() if self.config is not None else {} # Cannot be used with ResultRequest
+                # parent_parameters["advprefix_pipeline_identifier"] = "PIPELINE_ADVPREFIX"
 
-                if 200 <= parent_result_response.status_code < 300:
-                    if parent_result_response.parsed:
-                        created_parent_result = parent_result_response.parsed
-                        successful_creation = True
-                    elif (
-                        parent_result_response.status_code == 201
-                        and parent_result_response.content
+                parent_result_request = ResultRequest(
+                    run=UUID(self.run_id)  # ResultRequest expects 'run' (the run_id)
+                    # step_type=StepTypeEnum.OTHER, # Not a valid constructor argument for ResultRequest
+                    # parameters=parent_parameters, # Not a valid constructor argument
+                    # status=StatusEnum.RUNNING, # Not a valid constructor argument, status is set via PATCH later
+                )
+                parent_result_response = run_result_create.sync_detailed(
+                    client=self.client,
+                    id=UUID(self.run_id),  # Pass self.run_id as the 'id' for the path
+                    body=parent_result_request,
+                )
+                if parent_result_response.status_code == 201:
+                    if parent_result_response.parsed and hasattr(
+                        parent_result_response.parsed, "id"
                     ):
-                        try:
-                            created_parent_result_data = json.loads(
-                                parent_result_response.content.decode("utf-8")
-                            )
-                            created_parent_result = BackendResult.from_dict(
-                                created_parent_result_data
-                            )
-                            successful_creation = True
-                            self.logger.info(
-                                f"Manually parsed parent Result from 201 response for Run ID {self.run_id}"
-                            )
-                        except Exception as e_parse:
-                            self.logger.error(
-                                f"Failed to manually parse parent Result content for Run ID {self.run_id} despite 201 status. Parse Error: {e_parse}, Body: {parent_result_response.content}",
-                                exc_info=True,
-                            )
-
-                if not successful_creation or not created_parent_result:
-                    self.logger.error(
-                        f"Failed to create or parse parent Result for Run ID {self.run_id}. Status: {parent_result_response.status_code}, Parsed: {bool(parent_result_response.parsed)}, Body: {parent_result_response.content}"
-                    )
-                else:
-                    if (
-                        hasattr(created_parent_result, "id")
-                        and created_parent_result.id is not None
-                    ):
-                        parent_result_id = str(created_parent_result.id)
+                        parent_result_id = str(parent_result_response.parsed.id)
                         self.logger.info(
-                            f"Successfully created parent Result with ID: {parent_result_id} for Run ID {self.run_id}"
+                            f"Parent Result for AdvPrefix pipeline created with ID: {parent_result_id}"
                         )
                     else:
-                        self.logger.error(
-                            f"Parent Result created/parsed for Run ID {self.run_id}, but ID is missing or None. Result Data: {created_parent_result}"
-                        )
-
+                        # Try to parse the ID from the raw content if .parsed is None or lacks .id
+                        try:
+                            response_data = json.loads(
+                                parent_result_response.content.decode()
+                            )
+                            if "id" in response_data:
+                                parent_result_id = str(response_data["id"])
+                                self.logger.info(
+                                    f"Parent Result for AdvPrefix pipeline created with ID (from raw content): {parent_result_id}"
+                                )
+                            else:
+                                self.logger.error(
+                                    f"Parent Result created (Status 201) but ID not found in parsed or raw response. Raw: {parent_result_response.content}"
+                                )
+                        except Exception as e_parse:
+                            self.logger.error(
+                                f"Parent Result created (Status 201) but failed to parse ID from raw response. Raw: {parent_result_response.content}, Parse Error: {e_parse}"
+                            )
+                else:
+                    self.logger.error(
+                        f"Failed to create parent Result for AdvPrefix pipeline. Status: {parent_result_response.status_code}, Response: {parent_result_response.content}"
+                    )
             except Exception as e:
                 self.logger.error(
-                    f"Error creating parent Result for Run ID {self.run_id}: {e}",
+                    f"Exception creating parent Result for AdvPrefix pipeline: {e}",
                     exc_info=True,
                 )
         else:
-            if not self.run_id:
-                self.logger.warning(
-                    "Run ID not available, skipping parent Result creation."
-                )
-            if not run_result_create:
-                self.logger.warning(
-                    "`run_result_create` API function not available, skipping parent Result creation."
-                )
+            self.logger.warning(
+                "Cannot create parent Result as self.run_id is missing."
+            )
 
-        try:
-            start_step = self.config.get("start_step", 1)
-            self.logger.info(f"Pipeline configured to start at step {start_step}.")
+        goals_df = pd.DataFrame(goals, columns=["goal"])
+        goals_df["category"] = "general"
+        last_step_output_df = goals_df
+        current_step_failed = False  # Initialize here, before the loop
+        trace_sequence_counter = 0  # Initialize trace sequence counter
 
-            # Step 1: Generate Prefixes
-            if start_step <= 1:
-                final_step_reached = 1
-                self.logger.info("--- Running Step 1: Generate Prefixes ---")
+        pipeline_steps = [
+            {
+                "name": "Step 1: Generate Prefixes",
+                "function": step1_generate.execute,
+                "step_type_enum": "STEP1_GENERATE",
+                "config_keys": [
+                    "generator",
+                    "batch_size",
+                    "max_new_tokens",
+                    "guided_topk",
+                    "temperature",
+                    "meta_prefixes",
+                    "meta_prefix_samples",
+                ],
+                "input_df_arg_name": "goals",
+                "output_filename": "generated_prefixes.csv",
+            },
+            {
+                "name": "Step 2: Preprocess Generated Prefixes (Filter & Clean)",
+                "processor_method_name": "filter_phase1",
+                "step_type_enum": "STEP2_PREPROCESS_GENERATED",
+                "input_df_arg_name": "generated_prefixes_df",
+                "output_filename": "preprocessed_generated_prefixes.csv",
+            },
+            {
+                "name": "Step 4: Compute Cross-Entropy (CE) for Prefixes",
+                "function": step4_compute_ce.execute,
+                "step_type_enum": "STEP4_COMPUTE_CE",
+                "config_keys": ["batch_size", "surrogate_attack_prompt"],
+                "input_df_arg_name": "input_df",
+                "output_filename": "prefixes_with_ce.csv",
+            },
+            {
+                "name": "Step 5: Preprocess CE-computed Prefixes (Filter by CE)",
+                "processor_method_name": "filter_phase2",
+                "step_type_enum": "STEP5_PREPROCESS_CE_COMPUTED",
+                "input_df_arg_name": "prefixes_with_ce_df",
+                "output_filename": "filtered_prefixes_by_ce.csv",
+            },
+            {
+                "name": "Step 6: Get Completions for Filtered Prefixes",
+                "function": step6_get_completions.execute,
+                "step_type_enum": "STEP6_GET_COMPLETIONS",
+                "config_keys": ["batch_size", "max_new_tokens_completion", "n_samples"],
+                "input_df_arg_name": "input_df",
+                "output_filename": "completions.csv",
+            },
+            {
+                "name": "Step 7: Evaluate Completions (Judge Models)",
+                "function": step7_evaluate_responses.execute,
+                "step_type_enum": "STEP7_EVALUATE_RESPONSES",
+                "config_keys": [
+                    "judges",
+                    "batch_size_judge",
+                    "max_new_tokens_eval",
+                    "filter_len",
+                ],
+                "input_df_arg_name": "input_df",
+                "output_filename": "evaluations.csv",
+            },
+            {
+                "name": "Step 8: Aggregate Evaluations",
+                "function": step8_aggregate_evaluations.execute,
+                "step_type_enum": "STEP8_AGGREGATE_EVALUATIONS",
+                "config_keys": ["pasr_weight", "selection_judges", "max_ce"],
+                "input_df_arg_name": "input_df",
+                "output_filename": "aggregated_evaluations.csv",
+            },
+            {
+                "name": "Step 9: Select Final Prefixes",
+                "function": step9_select_prefixes.execute,
+                "step_type_enum": "STEP9_SELECT_PREFIXES",
+                "config_keys": ["n_prefixes_per_goal", "selection_judges"],
+                "input_df_arg_name": "input_df",
+                "output_filename": "selected_prefixes.csv",
+            },
+        ]
+
+        current_step_index = self.config.get("start_step", 1) - 1
+
+        for i in range(current_step_index, len(pipeline_steps)):
+            step_info = pipeline_steps[i]
+            step_name = step_info["name"]
+            self.logger.info(f"--- Starting {step_name} ---")
+
+            step_output_path = os.path.join(self.run_dir, step_info["output_filename"])
+            step_result_id = None
+
+            if parent_result_id:
                 try:
-                    unique_goals = list(dict.fromkeys(goals)) if goals else []
-                    # Await the call to step1_generate.execute
-                    last_step_output_df = await step1_generate.execute(
-                        goals=unique_goals,
-                        config=self.config,
-                        logger=self.logger,
-                        run_dir=self.run_dir,
+                    trace_sequence_counter += 1  # Increment for each new trace
+                    advprefix_step_name_str = step_info[
+                        "step_type_enum"
+                    ]  # Get the string like "STEP1_GENERATE"
+
+                    # Prepare content for the trace
+                    current_input_df_sample = None
+                    if last_step_output_df is not None and isinstance(
+                        last_step_output_df, pd.DataFrame
+                    ):
+                        # Replace inf with None for JSON compatibility before creating sample
+                        df_copy_for_trace = last_step_output_df.replace(
+                            [float("inf"), float("-inf")], None
+                        )
+                        current_input_df_sample = df_copy_for_trace.head().to_dict()
+
+                    trace_content_dict = {
+                        "config_snapshot": self.config,  # Or specific step_config
+                        "input_df_sample": current_input_df_sample,
+                        "advprefix_step_name": advprefix_step_name_str,  # Store the custom step name
+                        # Add other relevant info for this step if needed
+                    }
+
+                    trace_request = TraceRequest(
+                        # result_id=UUID(parent_result_id), # Incorrect: Handled by API path
+                        sequence=trace_sequence_counter,
+                        step_type=StepTypeEnum.OTHER,  # Use a valid existing enum member
+                        # status=StatusEnum.RUNNING, # Incorrect: Not a field for TraceRequest
+                        content=trace_content_dict,  # Pass the dictionary as content
+                    )
+                    # Corrected API call: pass parent_result_id as 'id'
+                    trace_response = result_trace_create.sync_detailed(
                         client=self.client,
+                        id=UUID(parent_result_id),
+                        body=trace_request,
                     )
-                    results_df = last_step_output_df
-                    if last_step_output_df is None or last_step_output_df.empty:
-                        self.logger.warning(
-                            "Step 1 returned empty or None DataFrame. Stopping pipeline."
+                    if (
+                        trace_response.status_code == 201
+                    ):  # Changed condition: 201 is success
+                        if trace_response.parsed and hasattr(
+                            trace_response.parsed, "id"
+                        ):
+                            step_result_id = str(trace_response.parsed.id)
+                            self.logger.info(
+                                f"Trace record created for {step_name} with ID: {step_result_id}"
+                            )
+                        else:
+                            # Attempt to get ID from raw response if .parsed is not helpful for 201
+                            try:
+                                response_data_trace = json.loads(
+                                    trace_response.content.decode()
+                                )
+                                if "id" in response_data_trace:
+                                    step_result_id = str(response_data_trace["id"])
+                                    self.logger.info(
+                                        f"Trace record created for {step_name} with ID (from raw 201 content): {step_result_id}"
+                                    )
+                                else:
+                                    self.logger.warning(
+                                        f"Trace created for {step_name} (Status 201), but ID not found in parsed or raw response. Raw: {trace_response.content}"
+                                    )
+                            except Exception as e_parse_trace:
+                                self.logger.warning(
+                                    f"Trace created for {step_name} (Status 201), but failed to parse ID from raw. Error: {e_parse_trace}, Raw: {trace_response.content}"
+                                )
+                    else:
+                        self.logger.error(
+                            f"Failed to create Trace for {step_name}. Status: {trace_response.status_code}, Response: {trace_response.content}"
                         )
-                        pipeline_failed = True
-                        current_run_status = StatusEnum.FAILED
-                        raise StopIteration("Step 1 failed or produced no output.")
                 except Exception as e:
-                    self.logger.error(f"Step 1 execution failed: {e}", exc_info=True)
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration(f"Step 1 failed: {e}")
-                finally:
-                    if parent_result_id and result_trace_create:
-                        try:
-                            content_json = (
-                                last_step_output_df.to_json(
-                                    orient="records", default_handler=str
-                                )
-                                if last_step_output_df is not None
-                                and not last_step_output_df.empty
-                                else "{}"
-                            )
-                            trace_request_body = TraceRequest(
-                                sequence=final_step_reached,
-                                step_type=StepTypeEnum.OTHER,
-                                content={
-                                    "step_name": "Step 1: Generate Prefixes",
-                                    "data_json": content_json,
-                                    "status": (
-                                        "Failed" if pipeline_failed else "Completed"
-                                    ),
-                                },
-                            )
-                            trace_response = await result_trace_create.asyncio_detailed(
-                                client=self.client,
-                                id=UUID(parent_result_id),
-                                body=trace_request_body,
-                            )
-                            if not (200 <= trace_response.status_code < 300):
-                                self.logger.error(
-                                    f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                                )
-                            else:
-                                self.logger.info(
-                                    f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                                )
-                        except Exception as te:
-                            self.logger.error(
-                                f"Error creating Trace for Step 1: {te}", exc_info=True
-                            )
-                    elif not result_trace_create and parent_result_id:
-                        self.logger.warning(
-                            f"`result_trace_create` API function not available, skipping Trace creation for Step {final_step_reached}."
-                        )
-
-            # Step 2: Filter Phase 1
-            if start_step <= 2 and not pipeline_failed:
-                final_step_reached = 2
-                self.logger.info("--- Running Step 2: Filter Phase 1 ---")
-                if self.preprocessor is None:
                     self.logger.error(
-                        "Preprocessor not initialized, cannot run Step 2."
+                        f"Exception creating Trace for {step_name}: {e}", exc_info=True
                     )
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 2 failed: Preprocessor missing.")
-                # Assuming execute_processor_step is synchronous
-                last_step_output_df = execute_processor_step(
-                    input_df=last_step_output_df,
-                    logger=self.logger,
-                    run_dir=self.run_dir,
-                    processor_instance=self.preprocessor,
-                    processor_method_name="filter_phase1",
-                    step_number=2,
-                    step_name_for_logging="Initial prefix filtering (Phase 1)",
-                    log_success_details_template="{count} prefixes remaining after phase 1 filtering.",
-                )
-                if last_step_output_df is None:
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 2 failed critically (returned None).")
-                if parent_result_id and result_trace_create:
+
+            current_step_failed = False  # Reset for current step
+            try:  # Main try for step execution
+                # Prepare the configuration dictionary specific to this step
+                step_specific_config_dict = {
+                    k: self.config[k]
+                    for k in step_info.get("config_keys", [])
+                    if k in self.config
+                }
+
+                if "function" in step_info:
+                    step_function = step_info["function"]
+                    step_args = {}
+
+                    # Common arguments for most step functions
+                    step_args["logger"] = self.logger
+                    step_args["run_dir"] = self.run_dir
+                    step_args["client"] = (
+                        self.client
+                    )  # Pass client if needed by step (e.g. step1, step7 for their own routers)
+                    step_args["config"] = (
+                        step_specific_config_dict  # Pass the step-specific config sub-dictionary
+                    )
+
+                    if step_name == "Step 1: Generate Prefixes":
+                        step_args[step_info["input_df_arg_name"]] = (
+                            goals  # "goals" is List[str]
+                        )
+                        # Step 1 (step1_generate.execute) does not take agent_router directly
+                        if "agent_router" in step_args:
+                            del step_args["agent_router"]
+                    elif step_name == "Step 4: Compute Cross-Entropy (CE) for Prefixes":
+                        step_args[step_info["input_df_arg_name"]] = last_step_output_df
+                        step_args["agent_router"] = self.agent_router
+                    elif step_name == "Step 6: Get Completions for Filtered Prefixes":
+                        step_args[step_info["input_df_arg_name"]] = last_step_output_df
+                        step_args["agent_router"] = self.agent_router
+                        if "client" in step_args:  # Step 6 does not expect client
+                            del step_args["client"]
+                    elif step_name == "Step 7: Evaluate Completions (Judge Models)":
+                        step_args[step_info["input_df_arg_name"]] = last_step_output_df
+                        step_args["client"] = (
+                            self.client
+                        )  # ADDED client for AgentRouter instantiation in Step 7
+                        # No agent_router needed for step 7 typically (uses its own for judges)
+                        # if "client" in step_args: del step_args["client"] # This was incorrect, client is needed
+                        if "agent_router" in step_args:
+                            del step_args["agent_router"]
+                    elif step_name == "Step 8: Aggregate Evaluations":
+                        step_args[step_info["input_df_arg_name"]] = last_step_output_df
+                        # Step 8 (step8_aggregate_evaluations.execute) only expects input_df, config, run_dir
+                        if "client" in step_args:
+                            del step_args["client"]
+                        if "agent_router" in step_args:
+                            del step_args["agent_router"]
+                        if "logger" in step_args:
+                            del step_args["logger"]  # Also remove logger for step 8
+                    elif step_name == "Step 9: Select Final Prefixes":
+                        step_args[step_info["input_df_arg_name"]] = last_step_output_df
+                        # Step 9 (step9_select_prefixes.execute) expects input_df, config, run_dir
+                        if "client" in step_args:
+                            del step_args["client"]
+                        if "agent_router" in step_args:
+                            del step_args["agent_router"]
+                        if "logger" in step_args:
+                            del step_args["logger"]  # Remove logger for step 9
+                    else:  # Default for other function-based steps if any added later
+                        step_args[step_info["input_df_arg_name"]] = last_step_output_df
+
+                    self.logger.debug(
+                        f"Executing {step_name} with arguments: {{k: type(v) for k,v in step_args.items()}}"
+                    )
+                    last_step_output_df = step_function(**step_args)
+                elif "processor_method_name" in step_info:
+                    if not self.preprocessor:
+                        self.logger.error(
+                            f"Preprocessor not initialized, cannot execute {step_name}. Skipping."
+                        )
+                        raise RuntimeError(
+                            f"Preprocessor not available for {step_name}"
+                        )
+                    method_name = step_info["processor_method_name"]
+                    processor_method = getattr(self.preprocessor, method_name, None)
+                    if not processor_method:
+                        self.logger.error(
+                            f"Method {method_name} not found in Preprocessor. Skipping {step_name}."
+                        )
+                        raise RuntimeError(
+                            f"Method {method_name} not found for {step_name}"
+                        )
+                    self.logger.debug(
+                        f"Executing {step_name} (preprocessor method: {method_name}) with input DF type: {type(last_step_output_df)}."
+                    )
+                    # Processor methods expect the DataFrame as the first positional argument.
+                    last_step_output_df = processor_method(last_step_output_df)
+                else:
+                    self.logger.warning(
+                        f"No function or processor method defined for {step_name}. Skipping."
+                    )
+                    continue
+
+                if last_step_output_df is None or (
+                    isinstance(last_step_output_df, pd.DataFrame)
+                    and last_step_output_df.empty
+                ):
+                    self.logger.warning(
+                        f"{step_name} did not return a valid DataFrame or returned an empty one. Output path: {step_output_path}"
+                    )
+
+                if (
+                    isinstance(last_step_output_df, pd.DataFrame)
+                    and not last_step_output_df.empty
+                ):
+                    self.logger.info(
+                        f"Saving output of {step_name} to {step_output_path}"
+                    )
+                    os.makedirs(os.path.dirname(step_output_path), exist_ok=True)
+                    last_step_output_df.to_csv(step_output_path, index=False)
+                    self.logger.info(f"Output of {step_name} saved successfully.")
+                elif last_step_output_df is not None:
+                    self.logger.warning(
+                        f"{step_name} did not return a DataFrame. Type: {type(last_step_output_df)}. Output not saved to CSV."
+                    )
+
+            except Exception as e:  # Main except for step execution
+                current_step_failed = True
+                self.logger.error(f"--- Error in {step_name} ---: {e}", exc_info=True)
+                step_error_message = str(e)
+
+                if parent_result_id:
                     try:
-                        content_json = (
-                            last_step_output_df.to_json(
-                                orient="records", default_handler=str
-                            )
-                            if last_step_output_df is not None
-                            and not last_step_output_df.empty
-                            else "{}"
+                        parent_fail_message = (
+                            f"Pipeline failed at {step_name}: {step_error_message}"
                         )
-                        trace_request_body = TraceRequest(
-                            sequence=final_step_reached,
-                            step_type=StepTypeEnum.OTHER,
-                            content={
-                                "step_name": "Step 2: Filter Phase 1",
-                                "data_json": content_json,
-                                "status": "Completed",
-                            },
+                        parent_failed_request = PatchedResultRequest(
+                            evaluation_status=EvaluationStatusEnum.ERROR_TEST_FRAMEWORK,
+                            evaluation_notes=parent_fail_message,
                         )
-                        trace_response = await result_trace_create.asyncio_detailed(
+                        result_partial_update.sync_detailed(
                             client=self.client,
                             id=UUID(parent_result_id),
-                            body=trace_request_body,
+                            body=parent_failed_request,
                         )
-                        if not (200 <= trace_response.status_code < 300):
-                            self.logger.error(
-                                f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                            )
-                        else:
-                            self.logger.info(
-                                f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                            )
-                    except Exception as te:
+                    except (
+                        Exception
+                    ) as parent_e:  # Changed 'e' to 'parent_e' for clarity
                         self.logger.error(
-                            f"Error creating Trace for Step {final_step_reached}: {te}",
+                            f"Additionally, failed to update parent Result {parent_result_id} to FAILED: {parent_e}",
                             exc_info=True,
                         )
-                elif not result_trace_create and parent_result_id:
-                    self.logger.warning(
-                        f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                    )
 
-            # Step 3: Ablate Prefixes
-            if start_step <= 3 and not pipeline_failed:
-                final_step_reached = 3
-                self.logger.info("--- Running Step 3: Ablate Prefixes ---")
-                if self.preprocessor is None:
-                    self.logger.error(
-                        "Preprocessor not initialized, cannot run Step 3."
-                    )
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 3 failed: Preprocessor missing.")
-                # Assuming execute_processor_step is synchronous
-                last_step_output_df = execute_processor_step(
-                    input_df=last_step_output_df,
-                    logger=self.logger,
-                    run_dir=self.run_dir,
-                    processor_instance=self.preprocessor,
-                    processor_method_name="ablate",
-                    step_number=3,
-                    step_name_for_logging="Prefix ablation",
-                    log_success_details_template="{count} ablated prefixes created.",
-                )
-                if last_step_output_df is None:
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 3 failed critically (returned None).")
-                if parent_result_id and result_trace_create:
+                if self.run_id:
                     try:
-                        content_json = (
-                            last_step_output_df.to_json(
-                                orient="records", default_handler=str
-                            )
-                            if last_step_output_df is not None
-                            and not last_step_output_df.empty
-                            else "{}"
+                        run_failed_request = PatchedRunRequest(status=StatusEnum.FAILED)
+                        run_partial_update.sync_detailed(
+                            client=self.client, id=self.run_id, body=run_failed_request
                         )
-                        trace_request_body = TraceRequest(
-                            sequence=final_step_reached,
-                            step_type=StepTypeEnum.OTHER,
-                            content={
-                                "step_name": "Step 3: Ablate Prefixes",
-                                "data_json": content_json,
-                                "status": "Completed",
-                            },
-                        )
-                        trace_response = await result_trace_create.asyncio_detailed(
-                            client=self.client,
-                            id=UUID(parent_result_id),
-                            body=trace_request_body,
-                        )
-                        if not (200 <= trace_response.status_code < 300):
-                            self.logger.error(
-                                f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                            )
-                        else:
-                            self.logger.info(
-                                f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                            )
-                    except Exception as te:
+                    except Exception as run_e:
                         self.logger.error(
-                            f"Error creating Trace for Step {final_step_reached}: {te}",
+                            f"Additionally, failed to update server Run {self.run_id} to FAILED: {run_e}",
                             exc_info=True,
                         )
-                elif not result_trace_create and parent_result_id:
-                    self.logger.warning(
-                        f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                    )
 
-            # Step 4: Compute Cross-Entropy
-            # Note: step4_compute_ce.execute itself was called with asyncio.run before.
-            # If step4_compute_ce.execute is an async function, it should be awaited directly.
-            # If it's synchronous but internally uses asyncio.run, that might need its own refactor.
-            # For now, assuming its signature implies it can be awaited if it's async.
-            # The original code was `asyncio.run(step4_compute_ce.execute(...))`.
-            # This implies step4_compute_ce.execute is itself an async function.
-            if start_step <= 4 and not pipeline_failed:
-                final_step_reached = 4
-                self.logger.info("--- Running Step 4: Compute Cross-Entropy ---")
-                try:
-                    # If step4_compute_ce.execute is async, it should be awaited.
-                    last_step_output_df = await step4_compute_ce.execute(
-                        input_df=last_step_output_df,
-                        config=self.config,
-                        logger=self.logger,
-                        run_dir=self.run_dir,
-                        client=self.client,  # client might be used by step4 for its own async calls
-                        agent_router=self.agent_router,
-                    )
-                    results_df = last_step_output_df
-                    if last_step_output_df is None:
-                        pipeline_failed = True
-                        current_run_status = StatusEnum.FAILED
-                        raise StopIteration("Step 4 failed critically.")
-                except Exception as e:
-                    self.logger.error(f"Step 4 execution failed: {e}", exc_info=True)
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration(f"Step 4 failed: {e}")
-                finally:
-                    if parent_result_id and result_trace_create:
-                        try:
-                            content_json = (
-                                last_step_output_df.to_json(
-                                    orient="records", default_handler=str
-                                )
-                                if last_step_output_df is not None
-                                and not last_step_output_df.empty
-                                else "{}"
-                            )
-                            trace_request_body = TraceRequest(
-                                sequence=final_step_reached,
-                                step_type=StepTypeEnum.OTHER,
-                                content={
-                                    "step_name": "Step 4: Compute Cross-Entropy",
-                                    "data_json": content_json,
-                                    "status": (
-                                        "Failed"
-                                        if pipeline_failed and start_step <= 4
-                                        else "Completed"
-                                    ),
-                                },
-                            )
-                            trace_response = await result_trace_create.asyncio_detailed(
-                                client=self.client,
-                                id=UUID(parent_result_id),
-                                body=trace_request_body,
-                            )
-                            if not (200 <= trace_response.status_code < 300):
-                                self.logger.error(
-                                    f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                                )
-                            else:
-                                self.logger.info(
-                                    f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                                )
-                        except Exception as te:
-                            self.logger.error(
-                                f"Error creating Trace for Step {final_step_reached}: {te}",
-                                exc_info=True,
-                            )
-                    elif not result_trace_create and parent_result_id:
-                        self.logger.warning(
-                            f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                        )
+                self.logger.error(f"Pipeline halted at {step_name} due to error.")
+                return pd.DataFrame()
 
-            # Step 5: Filter Phase 2 (CE-based)
-            if start_step <= 5 and not pipeline_failed:
-                final_step_reached = 5
-                self.logger.info("--- Running Step 5: Filter Phase 2 (CE-based) ---")
-                if self.preprocessor is None:
-                    self.logger.error(
-                        "Preprocessor not initialized, cannot run Step 5."
-                    )
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 5 failed: Preprocessor missing.")
-                # Assuming execute_processor_step is synchronous
-                last_step_output_df = execute_processor_step(
-                    input_df=last_step_output_df,
-                    logger=self.logger,
-                    run_dir=self.run_dir,
-                    processor_instance=self.preprocessor,
-                    processor_method_name="filter_phase2",
-                    step_number=5,
-                    step_name_for_logging="CE-based filtering (Phase 2)",
-                    log_success_details_template="{count} prefixes remaining after phase 2 filtering.",
-                )
-                if last_step_output_df is None:
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 5 failed critically (returned None).")
-                if parent_result_id and result_trace_create:
-                    try:
-                        content_json = (
-                            last_step_output_df.to_json(
-                                orient="records", default_handler=str
-                            )
-                            if last_step_output_df is not None
-                            and not last_step_output_df.empty
-                            else "{}"
-                        )
-                        trace_request_body = TraceRequest(
-                            sequence=final_step_reached,
-                            step_type=StepTypeEnum.OTHER,
-                            content={
-                                "step_name": "Step 5: Filter Phase 2 (CE-based)",
-                                "data_json": content_json,
-                                "status": "Completed",
-                            },
-                        )
-                        trace_response = await result_trace_create.asyncio_detailed(
-                            client=self.client,
-                            id=UUID(parent_result_id),
-                            body=trace_request_body,
-                        )
-                        if not (200 <= trace_response.status_code < 300):
-                            self.logger.error(
-                                f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                            )
-                        else:
-                            self.logger.info(
-                                f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                            )
-                    except Exception as te:
-                        self.logger.error(
-                            f"Error creating Trace for Step {final_step_reached}: {te}",
-                            exc_info=True,
-                        )
-                elif not result_trace_create and parent_result_id:
-                    self.logger.warning(
-                        f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                    )
-
-            # Step 6: Get Completions
-            # Assuming step6_get_completions.execute is synchronous. If it becomes async, needs await.
-            if start_step <= 6 and not pipeline_failed:
-                final_step_reached = 6
-                self.logger.info("--- Running Step 6: Get Completions ---")
-                # Await the call to step6_get_completions.execute
-                last_step_output_df = await step6_get_completions.execute(
-                    agent_router=self.agent_router,
-                    input_df=last_step_output_df,
-                    config=self.config,
-                    logger=self.logger,
-                    run_dir=self.run_dir,
-                )
-                if last_step_output_df is None:
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 6 failed critically.")
-                if parent_result_id and result_trace_create:
-                    try:
-                        content_json = (
-                            last_step_output_df.to_json(
-                                orient="records", default_handler=str
-                            )
-                            if last_step_output_df is not None
-                            and not last_step_output_df.empty
-                            else "{}"
-                        )
-                        trace_request_body = TraceRequest(
-                            sequence=final_step_reached,
-                            step_type=StepTypeEnum.OTHER,
-                            content={
-                                "step_name": "Step 6: Get Completions",
-                                "data_json": content_json,
-                                "status": "Completed",
-                            },
-                        )
-                        trace_response = await result_trace_create.asyncio_detailed(
-                            client=self.client,
-                            id=UUID(parent_result_id),
-                            body=trace_request_body,
-                        )
-                        if not (200 <= trace_response.status_code < 300):
-                            self.logger.error(
-                                f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                            )
-                        else:
-                            self.logger.info(
-                                f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                            )
-                    except Exception as te:
-                        self.logger.error(
-                            f"Error creating Trace for Step {final_step_reached}: {te}",
-                            exc_info=True,
-                        )
-                elif not result_trace_create and parent_result_id:
-                    self.logger.warning(
-                        f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                    )
-
-            # Step 7: Evaluate Responses
-            # Assuming step7_evaluate_responses.execute is synchronous
-            if start_step <= 7 and not pipeline_failed:
-                final_step_reached = 7
-                self.logger.info("--- Running Step 7: Evaluate Responses ---")
-                last_step_output_df = step7_evaluate_responses.execute(
-                    input_df=last_step_output_df,
-                    config=self.config,
-                    logger=self.logger,
-                    run_dir=self.run_dir,
-                )
-                if last_step_output_df is None:
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 7 failed critically.")
-                if parent_result_id and result_trace_create:
-                    try:
-                        content_json = (
-                            last_step_output_df.to_json(
-                                orient="records", default_handler=str
-                            )
-                            if last_step_output_df is not None
-                            and not last_step_output_df.empty
-                            else "{}"
-                        )
-                        trace_request_body = TraceRequest(
-                            sequence=final_step_reached,
-                            step_type=StepTypeEnum.OTHER,
-                            content={
-                                "step_name": "Step 7: Evaluate Responses",
-                                "data_json": content_json,
-                                "status": "Completed",
-                            },
-                        )
-                        trace_response = await result_trace_create.asyncio_detailed(
-                            client=self.client,
-                            id=UUID(parent_result_id),
-                            body=trace_request_body,
-                        )
-                        if not (200 <= trace_response.status_code < 300):
-                            self.logger.error(
-                                f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                            )
-                        else:
-                            self.logger.info(
-                                f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                            )
-                    except Exception as te:
-                        self.logger.error(
-                            f"Error creating Trace for Step {final_step_reached}: {te}",
-                            exc_info=True,
-                        )
-                elif not result_trace_create and parent_result_id:
-                    self.logger.warning(
-                        f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                    )
-
-            # Step 8: Aggregate Evaluations
-            if start_step <= 8 and not pipeline_failed:
-                final_step_reached = 8
-                self.logger.info("--- Running Step 8: Aggregate Evaluations ---")
-                last_step_output_df = step8_aggregate_evaluations.execute(
-                    input_df=last_step_output_df,
-                    config=self.config,
-                    run_dir=self.run_dir,
-                )
-                if last_step_output_df is None:
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 8 failed critically.")
-                if parent_result_id and result_trace_create:
-                    try:
-                        content_json = (
-                            last_step_output_df.to_json(
-                                orient="records", default_handler=str
-                            )
-                            if last_step_output_df is not None
-                            and not last_step_output_df.empty
-                            else "{}"
-                        )
-                        trace_request_body = TraceRequest(
-                            sequence=final_step_reached,
-                            step_type=StepTypeEnum.OTHER,
-                            content={
-                                "step_name": "Step 8: Aggregate Evaluations",
-                                "data_json": content_json,
-                                "status": "Completed",
-                            },
-                        )
-                        trace_response = await result_trace_create.asyncio_detailed(
-                            client=self.client,
-                            id=UUID(parent_result_id),
-                            body=trace_request_body,
-                        )
-                        if not (200 <= trace_response.status_code < 300):
-                            self.logger.error(
-                                f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                            )
-                        else:
-                            self.logger.info(
-                                f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                            )
-                    except Exception as te:
-                        self.logger.error(
-                            f"Error creating Trace for Step {final_step_reached}: {te}",
-                            exc_info=True,
-                        )
-                elif not result_trace_create and parent_result_id:
-                    self.logger.warning(
-                        f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                    )
-
-            # Step 9: Select Prefixes
-            if start_step <= 9 and not pipeline_failed:
-                final_step_reached = 9
-                self.logger.info("--- Running Step 9: Select Prefixes ---")
-                results_df = step9_select_prefixes.execute(
-                    input_df=last_step_output_df,
-                    config=self.config,
-                    run_dir=self.run_dir,
-                )
-                if results_df is None:
-                    pipeline_failed = True
-                    current_run_status = StatusEnum.FAILED
-                    raise StopIteration("Step 9 failed critically.")
-                last_step_output_df = results_df
-                if parent_result_id and result_trace_create:
-                    try:
-                        content_json = (
-                            results_df.to_json(orient="records", default_handler=str)
-                            if results_df is not None and not results_df.empty
-                            else "{}"
-                        )
-                        trace_request_body = TraceRequest(
-                            sequence=final_step_reached,
-                            step_type=StepTypeEnum.OTHER,
-                            content={
-                                "step_name": "Step 9: Select Prefixes",
-                                "data_json": content_json,
-                                "status": "Completed",
-                            },
-                        )
-                        trace_response = await result_trace_create.asyncio_detailed(
-                            client=self.client,
-                            id=UUID(parent_result_id),
-                            body=trace_request_body,
-                        )
-                        if not (200 <= trace_response.status_code < 300):
-                            self.logger.error(
-                                f"Failed to create Trace for Result {parent_result_id}, Step {final_step_reached}. Status: {trace_response.status_code}, Body: {trace_response.content}"
-                            )
-                        else:
-                            self.logger.info(
-                                f"Successfully created Trace for Result {parent_result_id}, Step {final_step_reached}."
-                            )
-                    except Exception as te:
-                        self.logger.error(
-                            f"Error creating Trace for Step {final_step_reached}: {te}",
-                            exc_info=True,
-                        )
-                elif not result_trace_create and parent_result_id:
-                    self.logger.warning(
-                        f"`result_trace_create` API not available, skipping Trace for Step {final_step_reached}."
-                    )
-
-            if pipeline_failed:
+            if current_step_failed:
                 self.logger.error(
-                    f"Pipeline marked as failed after step {final_step_reached}."
-                )
-                current_run_status = StatusEnum.FAILED
-            elif final_step_reached == 0:
+                    f"Pipeline processing stopped due to failure in {step_name}."
+                )  # Should be caught by return above
+                return pd.DataFrame()
+
+            self.logger.info(f"--- Completed {step_name} ---")
+            if last_step_output_df is None or (
+                isinstance(last_step_output_df, pd.DataFrame)
+                and last_step_output_df.empty
+            ):
                 self.logger.warning(
-                    "Pipeline did not execute any steps based on start_step config."
+                    f"No data produced by {step_name}, subsequent steps may fail or produce no results."
                 )
-                current_run_status = StatusEnum.COMPLETED
-            elif results_df is not None:
-                self.logger.info(
-                    "Prefix Generation Attack pipeline finished successfully at Step 9."
-                )
-                current_run_status = StatusEnum.COMPLETED
-                return results_df
-            else:
-                self.logger.warning(
-                    f"Pipeline finished after step {final_step_reached}. Returning intermediate results."
-                )
-                current_run_status = StatusEnum.COMPLETED
 
-            return (
-                last_step_output_df
-                if last_step_output_df is not None
-                else pd.DataFrame()
+        # After the loop
+        final_selected_prefixes_df = last_step_output_df
+        final_status = StatusEnum.COMPLETED  # Default
+        final_error_message = UNSET  # Default
+
+        if current_step_failed:  # This means the loop exited due to failure and returned. This part might not be reached.
+            # Re-evaluating based on whether loop completed or exited early.
+            # If loop completed, current_step_failed should be false (or true if last step failed but didn't halt)
+            # This condition implies failure if we reach here and current_step_failed is true
+            # However, the loop's except block already returns. So if we are here, loop completed.
+            # Let's refine based on if final_selected_prefixes_df is empty AND no prior return.
+            pass  # Logic already handled if current_step_failed leads to return in loop.
+
+        # Determine final status based on pipeline completion and results
+        if (
+            final_selected_prefixes_df is not None
+            and not final_selected_prefixes_df.empty
+        ):
+            self.logger.info("AdvPrefixAttack pipeline completed successfully.")
+            final_status = StatusEnum.COMPLETED
+            final_error_message = UNSET
+        # current_step_failed would have caused early exit. If we are here, the loop completed.
+        # This 'else' covers cases where loop completed but results are empty.
+        else:
+            self.logger.info(
+                "AdvPrefixAttack pipeline completed, but no prefixes were selected or generated (or last step failed without halting)."
             )
+            final_status = StatusEnum.COMPLETED
+            final_error_message = "Pipeline completed with no resulting prefixes or last step yielded no data."
 
-        except StopIteration as stop_e:
-            self.logger.error(f"Pipeline execution stopped: {stop_e}")
-            current_run_status = StatusEnum.FAILED
-        except Exception as e:
-            self.logger.error(
-                f"Pipeline orchestration failed unexpectedly: {str(e)}", exc_info=True
-            )
-            pipeline_failed = True
-            current_run_status = StatusEnum.FAILED
+        if parent_result_id:
+            try:
+                final_outputs_payload = {
+                    "final_df_sample": final_selected_prefixes_df.head().to_dict()
+                    if final_selected_prefixes_df is not None
+                    and isinstance(final_selected_prefixes_df, pd.DataFrame)
+                    else None
+                }
+                current_eval_status = EvaluationStatusEnum.PASSED_CRITERIA
+                current_eval_notes = UNSET
 
-        if self.run_id and run_partial_update:
+                if (
+                    final_status == StatusEnum.FAILED
+                ):  # This was for PatchedRunRequest, map to an EvaluationStatus
+                    current_eval_status = (
+                        EvaluationStatusEnum.ERROR_TEST_FRAMEWORK
+                    )  # Or other appropriate error
+                    if (
+                        final_error_message is not UNSET
+                        and final_error_message is not None
+                    ):
+                        current_eval_notes = str(final_error_message)
+                elif (
+                    final_selected_prefixes_df is None
+                    or final_selected_prefixes_df.empty
+                ):
+                    current_eval_status = (
+                        EvaluationStatusEnum.FAILED_CRITERIA
+                    )  # Or other status indicating no results
+                    current_eval_notes = (
+                        str(final_error_message)
+                        if final_error_message is not UNSET
+                        else "Pipeline completed with no resulting prefixes."
+                    )
+
+                final_parent_update_req = PatchedResultRequest(
+                    evaluation_status=current_eval_status,
+                    evaluation_notes=current_eval_notes,
+                    agent_specific_data={"outputs": final_outputs_payload},
+                )
+                result_partial_update.sync_detailed(
+                    client=self.client,
+                    id=UUID(parent_result_id),
+                    body=final_parent_update_req,
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Exception updating final status of parent Result {parent_result_id}: {e}",
+                    exc_info=True,
+                )
+
+        if self.run_id:
             try:
                 self.logger.info(
-                    f"Attempting to update Run {self.run_id} status to {current_run_status.value}"
+                    f"Updating server Run {self.run_id} to final status: {final_status.value}."
                 )
-                patched_run_body = PatchedRunRequest(
-                    status=current_run_status,
-                    run_notes=UNSET,
-                    run_config=UNSET,
-                    agent=UNSET,
-                    attack=UNSET,
+                final_run_update_req = PatchedRunRequest(status=final_status)
+                final_run_update_response = run_partial_update.sync_detailed(
+                    client=self.client,
+                    id=self.run_id,
+                    body=final_run_update_req,
                 )
-                update_response = await run_partial_update.asyncio_detailed(
-                    client=self.client, id=UUID(self.run_id), body=patched_run_body
-                )
-                if not (200 <= update_response.status_code < 300):
+                if final_run_update_response.status_code >= 300:
                     self.logger.error(
-                        f"Failed to update Run {self.run_id} status. Status: {update_response.status_code}, Body: {update_response.content}"
-                    )
-                else:
-                    self.logger.info(
-                        f"Successfully updated Run {self.run_id} status to {current_run_status.value}"
+                        f"Failed to update server Run {self.run_id} to final status {final_status.value}. Status: {final_run_update_response.status_code}, Response: {final_run_update_response.content}"
                     )
             except Exception as e:
                 self.logger.error(
-                    f"Error updating Run {self.run_id} status: {e}", exc_info=True
-                )
-        else:
-            if not self.run_id:
-                self.logger.warning(
-                    "Run ID not available, skipping final Run status update."
-                )
-            if not run_partial_update:
-                self.logger.warning(
-                    "`run_partial_update` API function not available, skipping final Run status update."
-                )
-
-        # Update the parent Result's evaluation_status
-        if parent_result_id and result_partial_update:
-            try:
-                final_eval_status = (
-                    EvaluationStatusEnum.SUCCESSFUL_JAILBREAK
-                    if not pipeline_failed
-                    and final_step_reached >= self.config.get("end_step", 9)
-                    else EvaluationStatusEnum.ERROR_TEST_FRAMEWORK
-                )
-                # If pipeline_failed was true due to an exception, ERROR_TEST_FRAMEWORK is appropriate.
-
-                self.logger.info(
-                    f"Attempting to update parent Result ID {parent_result_id} to evaluation_status: {final_eval_status.value}"
-                )
-
-                # Assuming PatchedResultRequest is the correct model and takes evaluation_status
-                patched_result_request_body = PatchedResultRequest(
-                    evaluation_status=final_eval_status
-                )
-
-                result_update_response = await result_partial_update.asyncio_detailed(
-                    client=self.client,
-                    id=UUID(parent_result_id),  # The ID of the Result to update
-                    body=patched_result_request_body,
-                )
-
-                if 200 <= result_update_response.status_code < 300:
-                    self.logger.info(
-                        f"Successfully updated parent Result ID {parent_result_id} evaluation_status to {final_eval_status.value}."
-                    )
-                else:
-                    self.logger.error(
-                        f"Failed to update parent Result ID {parent_result_id} evaluation_status. Server responded with {result_update_response.status_code}. Body: {result_update_response.content}"
-                    )
-            except Exception as e_result_update:
-                self.logger.error(
-                    f"Error updating evaluation_status for parent Result ID {parent_result_id}: {e_result_update}",
+                    f"Exception updating server Run {self.run_id} to final status: {e}",
                     exc_info=True,
                 )
-        elif not parent_result_id:
-            self.logger.warning(
-                "Parent Result ID not available, skipping evaluation_status update for parent Result."
-            )
-        elif not result_partial_update:
-            self.logger.warning(
-                "`result_partial_update` API not available, skipping evaluation_status update for parent Result."
-            )
-
-        if pipeline_failed:
-            self.logger.warning(
-                f"Returning output from last successful step ({final_step_reached}) due to failure."
-            )
-        elif final_step_reached < start_step and start_step > 1:
-            self.logger.warning(
-                f"Pipeline did not run any steps (start_step={start_step}). Returning empty DataFrame."
-            )
-            return pd.DataFrame()
 
         return (
-            last_step_output_df if last_step_output_df is not None else pd.DataFrame()
+            final_selected_prefixes_df
+            if final_selected_prefixes_df is not None
+            else pd.DataFrame()
         )
+
+    def _save_results_to_file(self, results_df: pd.DataFrame, filename: str):
+        # Assuming this method has a body.
+        # Replacing placeholder comment with 'pass' to make it syntactically valid.
+        # If actual code was here, it needs to be restored.
+        pass

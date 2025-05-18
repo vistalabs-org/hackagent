@@ -20,7 +20,9 @@ def _get_kwargs(
 
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": f"/api/result/{id}/trace",
+        "url": "/api/result/{id}/trace".format(
+            id=id,
+        ),
     }
 
     _body = body.to_dict()
@@ -63,7 +65,7 @@ def sync_detailed(
     body: TraceRequest,
 ) -> Response[Trace]:
     """Creates a new Trace associated with this Result.
-    The result instance is fetched using the 'pk' from the URL.
+    The result instance is fetched using the 'id' (the lookup_field) from the URL.
 
     Args:
         id (UUID):
@@ -96,7 +98,7 @@ def sync(
     body: TraceRequest,
 ) -> Optional[Trace]:
     """Creates a new Trace associated with this Result.
-    The result instance is fetched using the 'pk' from the URL.
+    The result instance is fetched using the 'id' (the lookup_field) from the URL.
 
     Args:
         id (UUID):
@@ -124,7 +126,7 @@ async def asyncio_detailed(
     body: TraceRequest,
 ) -> Response[Trace]:
     """Creates a new Trace associated with this Result.
-    The result instance is fetched using the 'pk' from the URL.
+    The result instance is fetched using the 'id' (the lookup_field) from the URL.
 
     Args:
         id (UUID):
@@ -155,7 +157,7 @@ async def asyncio(
     body: TraceRequest,
 ) -> Optional[Trace]:
     """Creates a new Trace associated with this Result.
-    The result instance is fetched using the 'pk' from the URL.
+    The result instance is fetched using the 'id' (the lookup_field) from the URL.
 
     Args:
         id (UUID):

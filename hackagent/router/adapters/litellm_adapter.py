@@ -1,9 +1,7 @@
 from hackagent.router.base import Agent
 from typing import Any, Dict, Optional, List
 import logging
-import asyncio  # Required for async handle_request
 import litellm
-
 import os
 # from rich.progress import Progress # Removed Progress import
 
@@ -70,7 +68,7 @@ class LiteLLMAgentAdapter(Agent):
         self.default_temperature = self.config.get("temperature", 0.8)
         self.default_top_p = self.config.get("top_p", 0.95)
 
-    async def _execute_litellm_completion(
+    def _execute_litellm_completion(
         self,
         texts: List[str],
         max_new_tokens: int,
@@ -80,6 +78,7 @@ class LiteLLMAgentAdapter(Agent):
     ) -> List[str]:
         """
         Internal method to generate completions using litellm.completion.
+        Relies on litellm's internal retry mechanisms if applicable.
         """
         if not texts:
             return []
@@ -89,9 +88,9 @@ class LiteLLMAgentAdapter(Agent):
             f"Sending {len(texts)} requests via LiteLLM to model '{self.model_name}'..."
         )
 
-        # Removed Progress wrapper as it can conflict with outer progress bars
         for text_prompt in texts:
             messages = [{"role": "user", "content": text_prompt}]
+            completion_text_suffix = ""  # To store error or actual completion
 
             try:
                 litellm_params = {
@@ -103,67 +102,40 @@ class LiteLLMAgentAdapter(Agent):
                     "api_base": self.api_base_url,
                     "api_key": self.actual_api_key,
                 }
-                # Merge any additional kwargs passed directly for litellm.completion
                 litellm_params.update(kwargs)
 
-                # Filter out None values from litellm_params as litellm might not like them for all keys
-                # Specifically, api_base and api_key can be None if not provided.
-                # LiteLLM handles None for api_base and api_key appropriately.
-                # litellm_params = {k: v for k, v in litellm_params.items() if v is not None}
+                # Single call to litellm.completion
+                response = litellm.completion(**litellm_params)
 
-                max_retries = 3
-                retry_delay = 2  # seconds
-                for attempt in range(max_retries):
-                    try:
-                        response = await asyncio.to_thread(
-                            litellm.completion, **litellm_params
-                        )
-                        # response = litellm.completion(**litellm_params) # original sync call
+                if (
+                    response
+                    and response.choices
+                    and response.choices[0].message
+                    and response.choices[0].message.content
+                ):
+                    completion_text_suffix = response.choices[0].message.content
+                else:
+                    self.logger.warning(
+                        f"LiteLLM received unexpected response structure for model '{self.model_name}' for prompt '{text_prompt[:50]}...'. Response: {response}"
+                    )
+                    completion_text_suffix = " [GENERATION_ERROR: UNEXPECTED_RESPONSE]"
 
-                        if (
-                            response
-                            and response.choices
-                            and response.choices[0].message
-                            and response.choices[0].message.content
-                        ):
-                            completion_text = response.choices[0].message.content
-                        else:
-                            self.logger.warning(
-                                f"LiteLLM received unexpected response structure for model '{self.model_name}'. Response: {response}"
-                            )
-                            completion_text = " [GENERATION_ERROR: UNEXPECTED_RESPONSE]"
-
-                        full_text = text_prompt + completion_text
-                        completions.append(full_text)
-                        break  # Success, exit retry loop
-                    except Exception as e:
-                        self.logger.warning(
-                            f"LiteLLM attempt {attempt + 1}/{max_retries} failed for model '{self.model_name}': {e}"
-                        )
-                        if attempt + 1 == max_retries:
-                            self.logger.error(
-                                f"LiteLLM completion failed after {max_retries} attempts for model '{self.model_name}'.",
-                                exc_info=True,
-                            )
-                            completions.append(
-                                text_prompt + " [GENERATION_ERROR: MAX_RETRIES]"
-                            )
-                        else:
-                            # time.sleep(retry_delay) # Can't use time.sleep in async directly
-                            await asyncio.sleep(retry_delay)  # Use asyncio.sleep
-            except Exception as outer_e:
+            except Exception as e:
                 self.logger.error(
-                    f"Critical error during LiteLLM request preparation or retry logic: {outer_e}",
+                    f"LiteLLM completion call failed for model '{self.model_name}' for prompt '{text_prompt[:50]}...': {e}",
                     exc_info=True,
                 )
-                completions.append(text_prompt + " [GENERATION_ERROR: SETUP_FAILURE]")
+                completion_text_suffix = f" [GENERATION_ERROR: {type(e).__name__}]"
+
+            full_text = text_prompt + completion_text_suffix
+            completions.append(full_text)
 
         self.logger.info(
             f"Finished LiteLLM requests for model '{self.model_name}'. Generated {len(completions)} responses."
         )
         return completions
 
-    async def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Handles an incoming request by processing it through LiteLLM.
 
@@ -201,9 +173,8 @@ class LiteLLMAgentAdapter(Agent):
         }
 
         try:
-            # The _execute_litellm_completion method now handles asyncio.to_thread internally for litellm.completion
-            # and also the retry loop with asyncio.sleep
-            completions = await self._execute_litellm_completion(
+            # The _execute_litellm_completion method is now synchronous
+            completions = self._execute_litellm_completion(
                 texts=[prompt_text],
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
