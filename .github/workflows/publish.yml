@@ -9,7 +9,6 @@ jobs:
   publish:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: [commit-check, python-checks, test]
     steps:
       - uses: actions/checkout@v4
 
