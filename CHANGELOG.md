@@ -22,6 +22,7 @@
 
 ### 💚👷 CI & Build
 
+- **publich**: publish without tests
 - **PyPi**: Add first release to PyPI
 
 ### 📌➕⬇️➖⬆️ Dependencies
