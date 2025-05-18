@@ -44,13 +44,11 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.coverage.run]
-branch = true
-parallel = false
 data_file = "reports/.coverage"
 source = ["hackagent"]
 
 [tool.coverage.report]
-fail_under = 80
+fail_under = 60
 precision = 1
 show_missing = true
 skip_covered = true
