@@ -1,10 +1,10 @@
 import logging
 import pandas as pd
-import multiprocessing
-import os
 from typing import Dict
 from dataclasses import fields  # Import fields to inspect dataclass
 
+from hackagent.client import AuthenticatedClient
+from hackagent.models import AgentTypeEnum
 from hackagent.attacks.AdvPrefix.scorer_parser import (
     EvaluatorConfig,
     NuancedEvaluator,
@@ -29,7 +29,10 @@ JUDGE_COLUMN_MAP = {
 
 
 def _run_evaluator_process_wrapper(
-    judge_type: str, config_dict_serializable: Dict, df: pd.DataFrame
+    judge_type: str,
+    client: AuthenticatedClient,
+    config_dict_serializable: Dict,
+    df: pd.DataFrame,
 ):
     """Static method to run a specific evaluator, suitable for multiprocessing."""
     process_logger = logging.getLogger(__name__ + f".evaluator_process_{judge_type}")
@@ -48,28 +51,41 @@ def _run_evaluator_process_wrapper(
             k: v for k, v in config_dict_serializable.items() if k in expected_fields
         }
 
-        # model_id is handled specially by EvaluatorConfig.with_default_model
-        # or within the specific evaluator's __init__.
-        # We should ensure model_id from the judge's config is passed if present.
-        if (
-            "model_id" in config_dict_serializable
-            and config_dict_serializable["model_id"]
+        # Ensure agent_type is an AgentTypeEnum instance if passed as string
+        if "agent_type" in filtered_config_dict and isinstance(
+            filtered_config_dict["agent_type"], str
         ):
-            filtered_config_dict["model_id"] = config_dict_serializable["model_id"]
-        elif (
-            "identifier" in config_dict_serializable
-            and config_dict_serializable["identifier"]
-        ):
-            # Fallback to using 'identifier' if 'model_id' wasn't explicitly passed/overridden
-            filtered_config_dict["model_id"] = config_dict_serializable["identifier"]
+            try:
+                filtered_config_dict["agent_type"] = AgentTypeEnum(
+                    filtered_config_dict["agent_type"].upper()
+                )
+            except ValueError:
+                process_logger.error(
+                    f"Invalid agent_type string: {filtered_config_dict['agent_type']}"
+                )
+                return None  # Cannot proceed
+
+        # model_id is already part of EvaluatorConfig and should be directly in filtered_config_dict if provided.
+        # The old logic for 'identifier' fallback is less relevant as EvaluatorConfig is more structured.
+        # if (
+        #     "model_id" in config_dict_serializable
+        #     and config_dict_serializable["model_id"]
+        # ):
+        #     filtered_config_dict["model_id"] = config_dict_serializable["model_id"]
+        # elif (
+        #     "identifier" in config_dict_serializable
+        #     and config_dict_serializable["identifier"]
+        # ):
+        #     # Fallback to using 'identifier' if 'model_id' wasn't explicitly passed/overridden
+        #     filtered_config_dict["model_id"] = config_dict_serializable["identifier"]
 
         process_logger.debug(
-            f"Filtered config for {judge_type} evaluator: {filtered_config_dict}"
+            f"Instantiating {judge_type} evaluator with Filtered config: {filtered_config_dict}"
         )
         evaluator_config = EvaluatorConfig(**filtered_config_dict)
 
-        # Instantiate the specific evaluator class
-        evaluator = evaluator_class(evaluator_config)
+        # Instantiate the specific evaluator class, passing the client
+        evaluator = evaluator_class(client=client, config=evaluator_config)
         evaluated_df = evaluator.evaluate(df)
 
         process_logger.info(f"Evaluator process finished for judge: {judge_type}")
@@ -102,7 +118,11 @@ def _run_evaluator_process_wrapper(
 
 
 def execute(
-    input_df: pd.DataFrame, config: Dict, logger: logging.Logger, run_dir: str
+    input_df: pd.DataFrame,
+    config: Dict,
+    logger: logging.Logger,
+    run_dir: str,
+    client: AuthenticatedClient,
 ) -> pd.DataFrame:
     """Evaluate completions using specified judges."""
     logger.info("Executing Step 7: Evaluating responses")
@@ -125,15 +145,20 @@ def execute(
         "batch_size": config.get("batch_size_judge"),
         "max_new_tokens_eval": config.get("max_new_tokens_eval"),
         "filter_len": config.get("filter_len"),
-        # General API settings (judges might override)
-        "endpoint": config.get("judge_endpoint"),
-        "api_key": config.get("judge_api_key"),
-        "request_timeout": config.get("judge_request_timeout"),
+        # General API settings (judges might override with agent_endpoint, agent_metadata)
+        # "endpoint": config.get("judge_endpoint"), # Replaced by agent_endpoint in judge config
+        # "api_key": config.get("judge_api_key"),   # Replaced by agent_metadata
+        "request_timeout": config.get("judge_request_timeout", 120),
+        "temperature": config.get(
+            "judge_temperature", 0.0
+        ),  # Default to 0.0 for judges
+        "organization_id": config.get(
+            "organization_id"
+        ),  # Pass along if globally configured
     }
 
     judge_results_dfs = {}
     failed_judges = []
-    async_results = []
     judges_to_run = []  # Store valid (type, config_dict) tuples
 
     # --- Prepare Judge Runs ---
@@ -151,20 +176,43 @@ def execute(
             "evaluator_type"
         ) or judge_config_item.get("type")
         judge_identifier = judge_config_item.get("identifier")
+        judge_agent_name = (
+            judge_config_item.get("agent_name")
+            or f"judge-{judge_type_str}-{judge_identifier.replace('/ ', '-')[:20]}"
+        )  # Construct agent name
+        judge_agent_type_str = judge_config_item.get(
+            "agent_type", "LITELMM"
+        )  # Default to LITELMM
+        judge_agent_endpoint = judge_config_item.get("endpoint")  # e.g. Ollama URL
+        judge_agent_metadata = judge_config_item.get(
+            "agent_metadata", {}
+        )  # e.g. {"api_key_env_var": "OLLAMA_API_KEY"}
 
         if not judge_type_str:
             # If type isn't explicit, try to infer (this part might need refinement)
-            if "nuanced" in judge_identifier.lower():
+            if (
+                judge_identifier and "nuanced" in judge_identifier.lower()
+            ):  # Check judge_identifier if not None
                 judge_type_str = "nuanced"
-            elif "harmbench" in judge_identifier.lower():
+            elif (
+                judge_identifier and "harmbench" in judge_identifier.lower()
+            ):  # Check judge_identifier if not None
                 judge_type_str = "harmbench"
-            elif "jailbreak" in judge_identifier.lower():
+            elif (
+                judge_identifier and "jailbreak" in judge_identifier.lower()
+            ):  # Check judge_identifier if not None
                 judge_type_str = "jailbreakbench"
             else:
                 logger.warning(
-                    f"Could not determine evaluator type for judge config: {judge_config_item}. Skipping."
+                    f"Could not determine evaluator type for judge config: {judge_config_item}. Requires 'evaluator_type' or inferable 'identifier'. Skipping."
                 )
                 continue
+
+        if not judge_identifier:
+            logger.warning(
+                f"Judge config missing 'identifier' (model_id) for {judge_type_str}: {judge_config_item}. Skipping."
+            )
+            continue
 
         # Check if the extracted type string is valid
         if judge_type_str not in EVALUATOR_MAP:
@@ -177,9 +225,23 @@ def execute(
         # Start with base, then override with judge-specific settings
         subprocess_config = evaluator_base_config_dict.copy()
         subprocess_config.update(judge_config_item)  # Override base with specifics
-        # Ensure model_id is set correctly (use 'identifier')
-        if judge_identifier:
-            subprocess_config["model_id"] = judge_identifier
+
+        # Populate fields for the new EvaluatorConfig
+        subprocess_config["agent_name"] = judge_agent_name
+        subprocess_config["agent_type"] = (
+            judge_agent_type_str  # Will be converted to Enum in wrapper
+        )
+        subprocess_config["model_id"] = (
+            judge_identifier  # model_id is the judge_identifier
+        )
+        subprocess_config["agent_endpoint"] = judge_agent_endpoint
+        subprocess_config["agent_metadata"] = judge_agent_metadata
+
+        # Remove legacy/general keys if they are now handled by specific EvaluatorConfig fields
+        # or are not part of EvaluatorConfig
+        # subprocess_config.pop("identifier", None) # 'identifier' became model_id
+        # subprocess_config.pop("type", None) # 'type' became evaluator_type then judge_type_str
+        # subprocess_config.pop("evaluator_type", None)
 
         judges_to_run.append((judge_type_str, subprocess_config))
 
@@ -189,53 +251,39 @@ def execute(
         )
         return original_df
 
-    # --- Setup Multiprocessing Pool ---
-    try:
-        current_start_method = multiprocessing.get_start_method(allow_none=True)
-        if current_start_method != "spawn":
-            multiprocessing.set_start_method("spawn", force=True)
-            logger.info("Set multiprocessing start method to 'spawn' for Step 7.")
-    except Exception as e:
-        logger.warning(f"Could not set multiprocessing start method to spawn: {e}")
-
     num_judges = len(judges_to_run)
-    num_workers = min(num_judges, os.cpu_count() or 1, 4)
     logger.info(
-        f"Starting evaluation pool with {num_workers} workers for {num_judges} judges."
+        f"Starting sequential evaluation for {num_judges} judges."  # UPDATED LOG
     )
 
-    # --- Dispatch and Collect Results ---
-    with multiprocessing.Pool(processes=num_workers) as pool:
-        # Dispatch tasks using the prepared list
-        for judge_type_str, subprocess_config in judges_to_run:
-            logger.info(
-                f"Dispatching evaluation with {judge_type_str} judge. Config: {subprocess_config}"
+    # Sequential execution
+    for judge_type_str, subprocess_config in judges_to_run:
+        logger.info(
+            f"Starting evaluation with {judge_type_str} judge. Config: {subprocess_config}"
+        )
+        try:
+            evaluated_df_subset = _run_evaluator_process_wrapper(
+                judge_type=judge_type_str,
+                client=client,  # Pass the client instance
+                config_dict_serializable=subprocess_config,
+                df=original_df.copy(),  # Pass a copy to avoid side effects
             )
-            args = (judge_type_str, subprocess_config, original_df.copy())
-            async_results.append(
-                pool.apply_async(_run_evaluator_process_wrapper, args=args)
-            )
-
-        # Collect results using the order in judges_to_run
-        for (judge_type_str, _), result in zip(judges_to_run, async_results):
-            try:
-                evaluated_df_subset = result.get()
-                if evaluated_df_subset is not None:
-                    judge_results_dfs[judge_type_str] = evaluated_df_subset
-                    logger.info(
-                        f"Successfully completed evaluation for judge: {judge_type_str}"
-                    )
-                else:
-                    failed_judges.append(judge_type_str)
-                    logger.error(
-                        f"Evaluation failed for judge: {judge_type_str} (process returned None)"
-                    )
-            except Exception as e:
+            if evaluated_df_subset is not None:
+                judge_results_dfs[judge_type_str] = evaluated_df_subset
+                logger.info(
+                    f"Successfully completed evaluation for judge: {judge_type_str}"
+                )
+            else:
                 failed_judges.append(judge_type_str)
                 logger.error(
-                    f"Evaluation task failed for judge {judge_type_str}: {e}",
-                    exc_info=True,
+                    f"Evaluation failed for judge: {judge_type_str} (wrapper returned None)"
                 )
+        except Exception as e:
+            failed_judges.append(judge_type_str)
+            logger.error(
+                f"Evaluation task failed for judge {judge_type_str}: {e}",
+                exc_info=True,
+            )
 
     # --- Merge Results ---
     final_df = original_df.copy()

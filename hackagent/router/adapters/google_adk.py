@@ -536,7 +536,7 @@ class ADKAgentAdapter(Agent):
             "adapter_type": "ADKAgentAdapter",
         }
 
-    async def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Handles an incoming request by creating an ADK session (if not existing)
         and then processing the request through the ADK agent.
@@ -638,21 +638,3 @@ class ADKAgentAdapter(Agent):
                 status_code=500,
                 raw_request=request_data,
             )
-
-    # Example of how session management methods could look if made part of the class:
-    # async def manage_adk_session(
-    #     self, action: str = 'create', initial_state: Optional[dict] = None
-    # ) -> bool:
-    #     if action == 'create':
-    #         return self._create_session_internal(initial_state)
-    #     # elif action == 'close':
-    #     #     # Implement _close_adk_session method
-    #     #     pass
-    #     return False
-
-    # Potentially, methods to manage ADK sessions if they are not handled per-request
-    # async def create_session(self, session_id: str, initial_state: Dict = None):
-    #     pass
-
-    # async def close_session(self, session_id: str):
-    #     pass

@@ -24,8 +24,11 @@ class UnexpectedStatusError(ApiError):
         )
 
 
+UnexpectedStatus = UnexpectedStatusError
+
 __all__ = [
     "HackAgentError",
     "ApiError",
     "UnexpectedStatusError",
+    "UnexpectedStatus",
 ]

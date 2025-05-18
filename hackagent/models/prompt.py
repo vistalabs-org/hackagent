@@ -151,15 +151,13 @@ class Prompt:
         def _parse_owner_detail(data: object) -> Union["UserProfileMinimal", None]:
             if data is None:
                 return data
-            try:
-                if not isinstance(data, dict):
-                    raise TypeError()
-                owner_detail_type_1 = UserProfileMinimal.from_dict(data)
-
-                return owner_detail_type_1
-            except:  # noqa: E722
-                pass
-            return cast(Union["UserProfileMinimal", None], data)
+            if not isinstance(data, dict):
+                # Similar handling as in UserAPIKey model
+                return cast(
+                    Union["UserProfileMinimal", None], data
+                )  # Fallback for non-dict
+            # Let UserProfileMinimal.from_dict raise its own errors
+            return UserProfileMinimal.from_dict(data)
 
         owner_detail = _parse_owner_detail(d.pop("owner_detail"))
 
