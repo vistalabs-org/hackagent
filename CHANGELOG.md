@@ -1,3 +1,10 @@
+## v0.2.1 (2025-05-19)
+
+### 🐛🚑️ Fixes
+
+- **generator**: generator available with the api
+- **generator**: generator available with the api
+
 ## v0.2.0 (2025-05-18)
 
 ### ✨ Features
