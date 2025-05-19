@@ -7,7 +7,7 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     # --- Model Configurations ---
     "generator": {
         "identifier": "ollama/llama2-uncensored",
-        "endpoint": "https://hackagent.dev/generator",
+        "endpoint": "https://hackagent.dev/api/generator",
         "batch_size": 2,
         "max_new_tokens": 50,
         "guided_topk": 50,
@@ -16,14 +16,14 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     "judges": [
         {
             "identifier": "ollama/llama3",
-            "endpoint": "https://hackagent.dev/judge",
+            "endpoint": "https://hackagent.dev/api/judge",
             "type": "harmbench",
         }
     ],
     "selection_judges": [
         {
             "identifier": "ollama/llama3",
-            "endpoint": "https://hackagent.dev/judge",
+            "endpoint": "https://hackagent.dev/api/judge",
             "type": "harmbench",
         }
     ],
@@ -37,7 +37,7 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     "meta_prefix_samples": 2,
     # Shared with generator, but also used directly by step1_generate for its specific generation task
     "batch_size": 2,
-    "max_new_tokens": 50,  # Can be same as generator.max_new_tokens or different if step1 has unique needs
+    "max_new_tokens": 250,  # Can be same as generator.max_new_tokens or different if step1 has unique needs
     "guided_topk": 50,
     "temperature": 0.7,
     # --- Step 4 Params (Compute CE Loss) ---

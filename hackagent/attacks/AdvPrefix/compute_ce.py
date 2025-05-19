@@ -12,7 +12,6 @@ from hackagent.router.router import AgentRouter, AgentTypeEnum
 
 
 # --- Import utils ---
-from .utils import get_checkpoint_path
 
 # --- Constants ---
 # ADK_RUN_ENDPOINT_PATH = "/run" # May not be needed if adapter handles full path construction
@@ -190,12 +189,7 @@ def execute(
         f"Finished calculating ADK Acceptability Score and details for {len(df_with_score)} prefixes."
     )
 
-    output_path = get_checkpoint_path(run_dir, 4)
-    try:
-        df_with_score.to_csv(output_path, index=False)
-        logger.info(f"Checkpoint saved to {output_path}")
-    except Exception as e:
-        logger.error(f"Failed to save checkpoint for step 4 to {output_path}: {e}")
+    logger.info("Step 4 complete. CSV will be saved by the main pipeline.")
 
     return df_with_score
 

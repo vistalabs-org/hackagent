@@ -7,14 +7,10 @@ from hackagent.attacks.AdvPrefix.selector import (
     PrefixSelector,
 )
 
-from .utils import get_checkpoint_path
-
 logger = logging.getLogger(__name__)
 
 
-def execute(
-    input_df: pd.DataFrame, config: Dict[str, Any], run_dir: str
-) -> pd.DataFrame:
+def execute(input_df: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
     """Select final prefixes based on specified judges and selection criteria using input DataFrame."""
     logger.info("Executing Step 9: Selecting final prefixes")
 
@@ -45,15 +41,9 @@ def execute(
 
     finally:
         del selector
-        # No GPU cleanup needed typically for selection
 
-    # Save results checkpoint (final step)
-    output_path = get_checkpoint_path(run_dir, 9)
-    try:
-        selected_df.to_csv(output_path, index=False)
-        logger.info("Step 9 complete.")
-        logger.info(f"Final selected prefixes checkpoint saved to {output_path}")
-    except Exception as e:
-        logger.error(f"Failed to save checkpoint for step 9 to {output_path}: {e}")
+    logger.info(
+        "Step 9 complete. Final selected prefixes CSV will be saved by the main pipeline."
+    )
 
     return selected_df

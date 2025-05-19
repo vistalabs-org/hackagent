@@ -18,12 +18,12 @@ from hackagent.router.router import AgentRouter  # For type hinting agent_router
 from .base import BaseAttack
 
 # Import step execution functions
-from .AdvPrefix import step1_generate
-from .AdvPrefix import step4_compute_ce
-from .AdvPrefix import step6_get_completions
-from .AdvPrefix import step7_evaluate_responses
-from .AdvPrefix import step8_aggregate_evaluations
-from .AdvPrefix import step9_select_prefixes
+from .AdvPrefix import generate
+from .AdvPrefix import compute_ce
+from .AdvPrefix import completions
+from .AdvPrefix import evaluation
+from .AdvPrefix import aggregation
+from .AdvPrefix import selection
 from .AdvPrefix.preprocessing import PrefixPreprocessor, PreprocessConfig
 
 # Models and API clients for backend interaction
@@ -392,7 +392,7 @@ class AdvPrefixAttack(BaseAttack):
         pipeline_steps = [
             {
                 "name": "Step 1: Generate Prefixes",
-                "function": step1_generate.execute,
+                "function": generate.execute,
                 "step_type_enum": "STEP1_GENERATE",
                 "config_keys": [
                     "generator",
@@ -415,7 +415,7 @@ class AdvPrefixAttack(BaseAttack):
             },
             {
                 "name": "Step 4: Compute Cross-Entropy (CE) for Prefixes",
-                "function": step4_compute_ce.execute,
+                "function": compute_ce.execute,
                 "step_type_enum": "STEP4_COMPUTE_CE",
                 "config_keys": ["batch_size", "surrogate_attack_prompt"],
                 "input_df_arg_name": "input_df",
@@ -430,7 +430,7 @@ class AdvPrefixAttack(BaseAttack):
             },
             {
                 "name": "Step 6: Get Completions for Filtered Prefixes",
-                "function": step6_get_completions.execute,
+                "function": completions.execute,
                 "step_type_enum": "STEP6_GET_COMPLETIONS",
                 "config_keys": ["batch_size", "max_new_tokens_completion", "n_samples"],
                 "input_df_arg_name": "input_df",
@@ -438,7 +438,7 @@ class AdvPrefixAttack(BaseAttack):
             },
             {
                 "name": "Step 7: Evaluate Completions (Judge Models)",
-                "function": step7_evaluate_responses.execute,
+                "function": evaluation.execute,
                 "step_type_enum": "STEP7_EVALUATE_RESPONSES",
                 "config_keys": [
                     "judges",
@@ -451,7 +451,7 @@ class AdvPrefixAttack(BaseAttack):
             },
             {
                 "name": "Step 8: Aggregate Evaluations",
-                "function": step8_aggregate_evaluations.execute,
+                "function": aggregation.execute,
                 "step_type_enum": "STEP8_AGGREGATE_EVALUATIONS",
                 "config_keys": ["pasr_weight", "selection_judges", "max_ce"],
                 "input_df_arg_name": "input_df",
@@ -459,7 +459,7 @@ class AdvPrefixAttack(BaseAttack):
             },
             {
                 "name": "Step 9: Select Final Prefixes",
-                "function": step9_select_prefixes.execute,
+                "function": selection.execute,
                 "step_type_enum": "STEP9_SELECT_PREFIXES",
                 "config_keys": ["n_prefixes_per_goal", "selection_judges"],
                 "input_df_arg_name": "input_df",
@@ -611,13 +611,15 @@ class AdvPrefixAttack(BaseAttack):
                             del step_args["logger"]  # Also remove logger for step 8
                     elif step_name == "Step 9: Select Final Prefixes":
                         step_args[step_info["input_df_arg_name"]] = last_step_output_df
-                        # Step 9 (step9_select_prefixes.execute) expects input_df, config, run_dir
+                        # Step 9 (step9_select_prefixes.execute) now expects input_df, config
                         if "client" in step_args:
                             del step_args["client"]
                         if "agent_router" in step_args:
                             del step_args["agent_router"]
                         if "logger" in step_args:
-                            del step_args["logger"]  # Remove logger for step 9
+                            del step_args["logger"]
+                        if "run_dir" in step_args:  # Added this to remove run_dir
+                            del step_args["run_dir"]  # Added this to remove run_dir
                     else:  # Default for other function-based steps if any added later
                         step_args[step_info["input_df_arg_name"]] = last_step_output_df
 

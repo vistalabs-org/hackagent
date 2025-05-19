@@ -11,7 +11,6 @@ from hackagent.attacks.AdvPrefix.scorer_parser import (
     HarmBenchEvaluator,
     JailbreakBenchEvaluator,
 )
-from hackagent.attacks.AdvPrefix.utils import get_checkpoint_path
 
 EVALUATOR_MAP = {
     "nuanced": NuancedEvaluator,
@@ -319,19 +318,27 @@ def execute(
             except Exception as e:
                 logger.error(f"Error merging results for judge {judge_type_str}: {e}")
 
-    # Save final merged results checkpoint
-    output_path = get_checkpoint_path(run_dir, 7)
-    try:
-        final_df.to_csv(output_path, index=False)
-        logger.info(f"Step 7 complete. Evaluated {len(final_df)} responses.")
-        if successful_judges:
-            logger.info(
-                f"Successfully completed judges: {', '.join(successful_judges)}"
-            )
-        if failed_judges:
-            logger.warning(f"Failed judges: {', '.join(failed_judges)}")
-        logger.info(f"Final evaluation results checkpoint saved to {output_path}")
-    except Exception as e:
-        logger.error(f"Failed to save checkpoint for step 7 to {output_path}: {e}")
+    # Save final merged results checkpoint - Removed, handled by main pipeline
+    # output_path = get_checkpoint_path(run_dir, 7)
+    # try:
+    #     final_df.to_csv(output_path, index=False)
+    #     logger.info(f"Step 7 complete. Evaluated {len(final_df)} responses.")
+    #     if successful_judges:
+    #         logger.info(
+    #             f"Successfully completed judges: {', '.join(successful_judges)}"
+    #         )
+    #     if failed_judges:
+    #         logger.warning(f"Failed judges: {', '.join(failed_judges)}")
+    #     logger.info(f"Final evaluation results checkpoint saved to {output_path}")
+    # except Exception as e:
+    #     logger.error(f"Failed to save checkpoint for step 7 to {output_path}: {e}")
+
+    logger.info(
+        f"Step 7 complete. Evaluated {len(final_df)} responses. CSV will be saved by the main pipeline."
+    )
+    if successful_judges:
+        logger.info(f"Successfully completed judges: {', '.join(successful_judges)}")
+    if failed_judges:
+        logger.warning(f"Failed judges: {', '.join(failed_judges)}")
 
     return final_df

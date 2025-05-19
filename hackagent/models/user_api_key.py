@@ -137,15 +137,15 @@ class UserAPIKey:
         def _parse_user_detail(data: object) -> Union["UserProfileMinimal", None]:
             if data is None:
                 return data
-            if not isinstance(data, dict):
-                # Or handle as an error appropriately, e.g., raise TypeError or return None
-                # For now, let's assume if it's not a dict, it can't be parsed.
-                # Depending on strictness, could raise TypeError here.
-                return cast(
-                    Union["UserProfileMinimal", None], data
-                )  # Fallback for non-dict
-            # Let UserProfileMinimal.from_dict raise its own errors if 'data' is malformed
-            return UserProfileMinimal.from_dict(data)
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                user_detail_type_1 = UserProfileMinimal.from_dict(data)
+
+                return user_detail_type_1
+            except:  # noqa: E722
+                pass
+            return cast(Union["UserProfileMinimal", None], data)
 
         user_detail = _parse_user_detail(d.pop("user_detail"))
 
@@ -156,13 +156,15 @@ class UserAPIKey:
         ) -> Union["OrganizationMinimal", None]:
             if data is None:
                 return data
-            if not isinstance(data, dict):
-                # Similar handling as _parse_user_detail
-                return cast(
-                    Union["OrganizationMinimal", None], data
-                )  # Fallback for non-dict
-            # Let OrganizationMinimal.from_dict raise its own errors
-            return OrganizationMinimal.from_dict(data)
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                organization_detail_type_1 = OrganizationMinimal.from_dict(data)
+
+                return organization_detail_type_1
+            except:  # noqa: E722
+                pass
+            return cast(Union["OrganizationMinimal", None], data)
 
         organization_detail = _parse_organization_detail(d.pop("organization_detail"))
 
