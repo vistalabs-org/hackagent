@@ -6,7 +6,6 @@ from typing import Dict, Any, Optional, List  # Added List
 # --- Import AgentRouter and related components ---
 from hackagent.router.router import AgentRouter, AgentTypeEnum
 
-from .utils import get_checkpoint_path
 
 # Constants for surrogate prompts
 SURROGATE_ATTACK_PROMPTS = {
@@ -327,11 +326,6 @@ def execute(
         f"Step 6 complete. Processed completions for {len(output_df)} prefixes."
     )
 
-    output_path = get_checkpoint_path(run_dir, 6)
-    try:
-        output_df.to_csv(output_path, index=False)
-        logger.info(f"Checkpoint saved to {output_path}")
-    except Exception as e:
-        logger.error(f"Failed to save checkpoint for step 6 to {output_path}: {e}")
+    logger.info("Step 6 complete. CSV will be saved by the main pipeline.")
 
     return output_df
