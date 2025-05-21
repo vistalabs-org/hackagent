@@ -7,7 +7,7 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     # --- Model Configurations ---
     "generator": {
         "identifier": "ollama/llama2-uncensored",
-        "endpoint": "https://hackagent.dev/api/generator",
+        "endpoint": "https://hackagent.dev/api/generate",
         "batch_size": 2,
         "max_new_tokens": 50,
         "guided_topk": 50,

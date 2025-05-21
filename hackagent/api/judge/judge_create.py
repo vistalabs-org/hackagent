@@ -5,23 +5,78 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.generate_error_response import GenerateErrorResponse
+from ...models.generate_request_request import GenerateRequestRequest
+from ...models.generate_success_response import GenerateSuccessResponse
 from ...types import Response
 
 
-def _get_kwargs() -> dict[str, Any]:
+def _get_kwargs(
+    *,
+    body: Union[
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+    ],
+) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
+
     _kwargs: dict[str, Any] = {
         "method": "post",
         "url": "/api/judge",
     }
 
+    if isinstance(body, GenerateRequestRequest):
+        _json_body = body.to_dict()
+
+        _kwargs["json"] = _json_body
+        headers["Content-Type"] = "application/json"
+    if isinstance(body, GenerateRequestRequest):
+        _data_body = body.to_dict()
+
+        _kwargs["data"] = _data_body
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    if isinstance(body, GenerateRequestRequest):
+        _files_body = body.to_multipart()
+
+        _kwargs["files"] = _files_body
+        headers["Content-Type"] = "multipart/form-data"
+
+    _kwargs["headers"] = headers
     return _kwargs
 
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Any]:
+) -> Optional[Union[GenerateErrorResponse, GenerateSuccessResponse]]:
     if response.status_code == 200:
-        return None
+        response_200 = GenerateSuccessResponse.from_dict(response.json())
+
+        return response_200
+    if response.status_code == 400:
+        response_400 = GenerateErrorResponse.from_dict(response.json())
+
+        return response_400
+    if response.status_code == 402:
+        response_402 = GenerateErrorResponse.from_dict(response.json())
+
+        return response_402
+    if response.status_code == 403:
+        response_403 = GenerateErrorResponse.from_dict(response.json())
+
+        return response_403
+    if response.status_code == 500:
+        response_500 = GenerateErrorResponse.from_dict(response.json())
+
+        return response_500
+    if response.status_code == 502:
+        response_502 = GenerateErrorResponse.from_dict(response.json())
+
+        return response_502
+    if response.status_code == 504:
+        response_504 = GenerateErrorResponse.from_dict(response.json())
+
+        return response_504
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -30,7 +85,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Any]:
+) -> Response[Union[GenerateErrorResponse, GenerateSuccessResponse]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -42,26 +97,35 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient,
-) -> Response[Any]:
-    r"""Proxies POST requests to the configured OpenRouter judge model.
-    Requires a valid User API Key for access.
-    The client should send a POST request with a JSON body in the same format
-    as expected by LiteLLM or OpenRouter's /chat/completions endpoint,
-    including a \"model\" field.
-    Note: The \"model\" field provided by the client in the request body will be
-    overridden by the server-configured judge model ID for the actual call to OpenRouter.
-    e.g., {\"model\": \"client_specified_model_name\", \"messages\": [{\"role\": \"user\", \"content\":
-    \"Is this good?\"}], \"stream\": False}
+    body: Union[
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+    ],
+) -> Response[Union[GenerateErrorResponse, GenerateSuccessResponse]]:
+    """Judge text or assess content using an AI Provider
+
+     Handles POST requests to assess or judge content via a configured Judge AI provider.
+    The request body should match the AI provider's expected format (e.g. chat completions),
+    though the 'model' field will be overridden by the server-configured judge model ID.
+    Billing and logging are handled internally.
+
+    Args:
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any]
+        Response[Union[GenerateErrorResponse, GenerateSuccessResponse]]
     """
 
-    kwargs = _get_kwargs()
+    kwargs = _get_kwargs(
+        body=body,
+    )
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -70,30 +134,111 @@ def sync_detailed(
     return _build_response(client=client, response=response)
 
 
-async def asyncio_detailed(
+def sync(
     *,
     client: AuthenticatedClient,
-) -> Response[Any]:
-    r"""Proxies POST requests to the configured OpenRouter judge model.
-    Requires a valid User API Key for access.
-    The client should send a POST request with a JSON body in the same format
-    as expected by LiteLLM or OpenRouter's /chat/completions endpoint,
-    including a \"model\" field.
-    Note: The \"model\" field provided by the client in the request body will be
-    overridden by the server-configured judge model ID for the actual call to OpenRouter.
-    e.g., {\"model\": \"client_specified_model_name\", \"messages\": [{\"role\": \"user\", \"content\":
-    \"Is this good?\"}], \"stream\": False}
+    body: Union[
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+    ],
+) -> Optional[Union[GenerateErrorResponse, GenerateSuccessResponse]]:
+    """Judge text or assess content using an AI Provider
+
+     Handles POST requests to assess or judge content via a configured Judge AI provider.
+    The request body should match the AI provider's expected format (e.g. chat completions),
+    though the 'model' field will be overridden by the server-configured judge model ID.
+    Billing and logging are handled internally.
+
+    Args:
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any]
+        Union[GenerateErrorResponse, GenerateSuccessResponse]
     """
 
-    kwargs = _get_kwargs()
+    return sync_detailed(
+        client=client,
+        body=body,
+    ).parsed
+
+
+async def asyncio_detailed(
+    *,
+    client: AuthenticatedClient,
+    body: Union[
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+    ],
+) -> Response[Union[GenerateErrorResponse, GenerateSuccessResponse]]:
+    """Judge text or assess content using an AI Provider
+
+     Handles POST requests to assess or judge content via a configured Judge AI provider.
+    The request body should match the AI provider's expected format (e.g. chat completions),
+    though the 'model' field will be overridden by the server-configured judge model ID.
+    Billing and logging are handled internally.
+
+    Args:
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
+
+    Raises:
+        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
+        httpx.TimeoutException: If the request takes longer than Client.timeout.
+
+    Returns:
+        Response[Union[GenerateErrorResponse, GenerateSuccessResponse]]
+    """
+
+    kwargs = _get_kwargs(
+        body=body,
+    )
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
+
+async def asyncio(
+    *,
+    client: AuthenticatedClient,
+    body: Union[
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+        GenerateRequestRequest,
+    ],
+) -> Optional[Union[GenerateErrorResponse, GenerateSuccessResponse]]:
+    """Judge text or assess content using an AI Provider
+
+     Handles POST requests to assess or judge content via a configured Judge AI provider.
+    The request body should match the AI provider's expected format (e.g. chat completions),
+    though the 'model' field will be overridden by the server-configured judge model ID.
+    Billing and logging are handled internally.
+
+    Args:
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
+        body (GenerateRequestRequest):
+
+    Raises:
+        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
+        httpx.TimeoutException: If the request takes longer than Client.timeout.
+
+    Returns:
+        Union[GenerateErrorResponse, GenerateSuccessResponse]
+    """
+
+    return (
+        await asyncio_detailed(
+            client=client,
+            body=body,
+        )
+    ).parsed

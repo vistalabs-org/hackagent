@@ -1,9 +1,77 @@
-from hackagent.router.base import Agent
-from typing import Any, Dict, Optional, List
-import logging
-import litellm
+# Copyright 2025 - Vista Labs. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import os
-# from rich.progress import Progress # Removed Progress import
+import logging
+from typing import Any, Dict, List, Optional
+
+# Attempt to import litellm, but catch ImportError if not installed.
+try:
+    import litellm
+    from litellm.exceptions import (
+        APIConnectionError,
+        RateLimitError,
+        ServiceUnavailableError,
+        Timeout,
+        APIError,
+        AuthenticationError,
+        BadRequestError,
+        NotFoundError,
+        PermissionDeniedError,
+        ContextWindowExceededError,
+    )
+
+    LITELLM_AVAILABLE = True
+except ImportError:
+    litellm = None  # type: ignore
+
+    # Define dummy exceptions if litellm is not available so the rest of the code can type hint
+    class APIConnectionError(Exception):
+        pass
+
+    class RateLimitError(Exception):
+        pass
+
+    class ServiceUnavailableError(Exception):
+        pass
+
+    class Timeout(Exception):
+        pass
+
+    class APIError(Exception):
+        pass
+
+    class AuthenticationError(Exception):
+        pass
+
+    class BadRequestError(Exception):
+        pass
+
+    class NotFoundError(Exception):
+        pass
+
+    class PermissionDeniedError(Exception):
+        pass
+
+    class ContextWindowExceededError(Exception):
+        pass
+
+    LITELLM_AVAILABLE = False
+
+
+from .base import Agent  # Updated import
 
 
 # --- Custom Exceptions ---

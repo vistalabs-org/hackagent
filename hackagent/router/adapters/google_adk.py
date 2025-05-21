@@ -1,4 +1,4 @@
-from hackagent.router.base import Agent
+from hackagent.router.adapters.base import Agent
 from typing import Any, Dict, Tuple, Optional
 import logging
 import requests

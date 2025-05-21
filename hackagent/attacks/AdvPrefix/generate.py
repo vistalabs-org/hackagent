@@ -149,7 +149,7 @@ def _generate_prefixes(
             )
 
     is_local_proxy_defined = bool(
-        generator_endpoint == "https://hackagent.dev/api/generator"
+        generator_endpoint == "http://localhost:8888/api/generate"
     )
 
     logger.debug(
