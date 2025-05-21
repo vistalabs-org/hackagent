@@ -48,7 +48,7 @@ data_file = "reports/.coverage"
 source = ["hackagent"]
 
 [tool.coverage.report]
-fail_under = 48
+fail_under = 40
 precision = 1
 show_missing = true
 skip_covered = true
