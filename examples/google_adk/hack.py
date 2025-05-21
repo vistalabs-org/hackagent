@@ -3,7 +3,7 @@ from hackagent.models import AgentTypeEnum
 
 agent = HackAgent(
     name="multi_tool_agent",
-    endpoint="http://localhost:8001",
+    endpoint="http://localhost:8000",
     agent_type=AgentTypeEnum.GOOGLE_ADK,
 )
 

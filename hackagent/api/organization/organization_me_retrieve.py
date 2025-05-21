@@ -5,13 +5,14 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.organization import Organization
 from ...types import Response
 
 
 def _get_kwargs() -> dict[str, Any]:
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/api/generator",
+        "method": "get",
+        "url": "/api/organization/me",
     }
 
     return _kwargs
@@ -19,9 +20,11 @@ def _get_kwargs() -> dict[str, Any]:
 
 def _parse_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Optional[Any]:
+) -> Optional[Organization]:
     if response.status_code == 200:
-        return None
+        response_200 = Organization.from_dict(response.json())
+
+        return response_200
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
     else:
@@ -30,7 +33,7 @@ def _parse_response(
 
 def _build_response(
     *, client: Union[AuthenticatedClient, Client], response: httpx.Response
-) -> Response[Any]:
+) -> Response[Organization]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -42,23 +45,15 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient,
-) -> Response[Any]:
-    r"""Proxies POST requests to the configured OpenRouter generator model.
-    Requires a valid User API Key for access.
-    The client should send a POST request with a JSON body in the same format
-    as expected by LiteLLM or OpenRouter's /chat/completions endpoint,
-    including a \"model\" field.
-    Note: The \"model\" field provided by the client in the request body will be
-    overridden by the server-configured generator model ID for the actual call to OpenRouter.
-    e.g., {\"model\": \"client_specified_model_name\", \"messages\": [{\"role\": \"user\", \"content\":
-    \"Hello!\"}], \"stream\": False}
+) -> Response[Organization]:
+    """Retrieve the organization for the currently authenticated user.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any]
+        Response[Organization]
     """
 
     kwargs = _get_kwargs()
@@ -70,26 +65,37 @@ def sync_detailed(
     return _build_response(client=client, response=response)
 
 
-async def asyncio_detailed(
+def sync(
     *,
     client: AuthenticatedClient,
-) -> Response[Any]:
-    r"""Proxies POST requests to the configured OpenRouter generator model.
-    Requires a valid User API Key for access.
-    The client should send a POST request with a JSON body in the same format
-    as expected by LiteLLM or OpenRouter's /chat/completions endpoint,
-    including a \"model\" field.
-    Note: The \"model\" field provided by the client in the request body will be
-    overridden by the server-configured generator model ID for the actual call to OpenRouter.
-    e.g., {\"model\": \"client_specified_model_name\", \"messages\": [{\"role\": \"user\", \"content\":
-    \"Hello!\"}], \"stream\": False}
+) -> Optional[Organization]:
+    """Retrieve the organization for the currently authenticated user.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[Any]
+        Organization
+    """
+
+    return sync_detailed(
+        client=client,
+    ).parsed
+
+
+async def asyncio_detailed(
+    *,
+    client: AuthenticatedClient,
+) -> Response[Organization]:
+    """Retrieve the organization for the currently authenticated user.
+
+    Raises:
+        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
+        httpx.TimeoutException: If the request takes longer than Client.timeout.
+
+    Returns:
+        Response[Organization]
     """
 
     kwargs = _get_kwargs()
@@ -97,3 +103,24 @@ async def asyncio_detailed(
     response = await client.get_async_httpx_client().request(**kwargs)
 
     return _build_response(client=client, response=response)
+
+
+async def asyncio(
+    *,
+    client: AuthenticatedClient,
+) -> Optional[Organization]:
+    """Retrieve the organization for the currently authenticated user.
+
+    Raises:
+        errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
+        httpx.TimeoutException: If the request takes longer than Client.timeout.
+
+    Returns:
+        Organization
+    """
+
+    return (
+        await asyncio_detailed(
+            client=client,
+        )
+    ).parsed

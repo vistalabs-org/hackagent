@@ -18,6 +18,7 @@ def _get_kwargs(
     is_client_executed: Union[Unset, bool] = UNSET,
     organization: Union[Unset, UUID] = UNSET,
     page: Union[Unset, int] = UNSET,
+    page_size: Union[Unset, int] = UNSET,
     status: Union[Unset, RunListStatus] = UNSET,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {}
@@ -40,6 +41,8 @@ def _get_kwargs(
     params["organization"] = json_organization
 
     params["page"] = page
+
+    params["page_size"] = page_size
 
     json_status: Union[Unset, str] = UNSET
     if not isinstance(status, Unset):
@@ -90,6 +93,7 @@ def sync_detailed(
     is_client_executed: Union[Unset, bool] = UNSET,
     organization: Union[Unset, UUID] = UNSET,
     page: Union[Unset, int] = UNSET,
+    page_size: Union[Unset, int] = UNSET,
     status: Union[Unset, RunListStatus] = UNSET,
 ) -> Response[PaginatedRunList]:
     """ViewSet for managing Run instances.
@@ -103,6 +107,7 @@ def sync_detailed(
         is_client_executed (Union[Unset, bool]):
         organization (Union[Unset, UUID]):
         page (Union[Unset, int]):
+        page_size (Union[Unset, int]):
         status (Union[Unset, RunListStatus]):
 
     Raises:
@@ -119,6 +124,7 @@ def sync_detailed(
         is_client_executed=is_client_executed,
         organization=organization,
         page=page,
+        page_size=page_size,
         status=status,
     )
 
@@ -137,6 +143,7 @@ def sync(
     is_client_executed: Union[Unset, bool] = UNSET,
     organization: Union[Unset, UUID] = UNSET,
     page: Union[Unset, int] = UNSET,
+    page_size: Union[Unset, int] = UNSET,
     status: Union[Unset, RunListStatus] = UNSET,
 ) -> Optional[PaginatedRunList]:
     """ViewSet for managing Run instances.
@@ -150,6 +157,7 @@ def sync(
         is_client_executed (Union[Unset, bool]):
         organization (Union[Unset, UUID]):
         page (Union[Unset, int]):
+        page_size (Union[Unset, int]):
         status (Union[Unset, RunListStatus]):
 
     Raises:
@@ -167,6 +175,7 @@ def sync(
         is_client_executed=is_client_executed,
         organization=organization,
         page=page,
+        page_size=page_size,
         status=status,
     ).parsed
 
@@ -179,6 +188,7 @@ async def asyncio_detailed(
     is_client_executed: Union[Unset, bool] = UNSET,
     organization: Union[Unset, UUID] = UNSET,
     page: Union[Unset, int] = UNSET,
+    page_size: Union[Unset, int] = UNSET,
     status: Union[Unset, RunListStatus] = UNSET,
 ) -> Response[PaginatedRunList]:
     """ViewSet for managing Run instances.
@@ -192,6 +202,7 @@ async def asyncio_detailed(
         is_client_executed (Union[Unset, bool]):
         organization (Union[Unset, UUID]):
         page (Union[Unset, int]):
+        page_size (Union[Unset, int]):
         status (Union[Unset, RunListStatus]):
 
     Raises:
@@ -208,6 +219,7 @@ async def asyncio_detailed(
         is_client_executed=is_client_executed,
         organization=organization,
         page=page,
+        page_size=page_size,
         status=status,
     )
 
@@ -224,6 +236,7 @@ async def asyncio(
     is_client_executed: Union[Unset, bool] = UNSET,
     organization: Union[Unset, UUID] = UNSET,
     page: Union[Unset, int] = UNSET,
+    page_size: Union[Unset, int] = UNSET,
     status: Union[Unset, RunListStatus] = UNSET,
 ) -> Optional[PaginatedRunList]:
     """ViewSet for managing Run instances.
@@ -237,6 +250,7 @@ async def asyncio(
         is_client_executed (Union[Unset, bool]):
         organization (Union[Unset, UUID]):
         page (Union[Unset, int]):
+        page_size (Union[Unset, int]):
         status (Union[Unset, RunListStatus]):
 
     Raises:
@@ -255,6 +269,7 @@ async def asyncio(
             is_client_executed=is_client_executed,
             organization=organization,
             page=page,
+            page_size=page_size,
             status=status,
         )
     ).parsed

@@ -1,3 +1,9 @@
+## v0.2.2 (2025-05-21)
+
+### ♻️ Refactorings
+
+- **api**: adding judge and generator within the api
+
 ## v0.2.1 (2025-05-19)
 
 ### 🐛🚑️ Fixes

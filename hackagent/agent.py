@@ -1,66 +1,108 @@
+# Copyright 2025 - Vista Labs. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
-import os
-from typing import Any, Optional, Dict, Tuple
-from dotenv import load_dotenv, find_dotenv
+from typing import Any, Dict, Optional, Union
 
 from hackagent.client import AuthenticatedClient
 from hackagent.models import AgentTypeEnum
 from hackagent.errors import HackAgentError
 from hackagent.router import AgentRouter
-
-# Import strategies
-from .attacks.strategies import (
-    AttackStrategy,
-    # DirectTestAttackStrategy,
-    # ManagedAttackStrategy,
-    AdvPrefix,
-)
-
-# Import for the splash screen
-from .branding import display_hackagent_splash
+from hackagent.vulnerabilities.prompts import DEFAULT_PROMPTS
+from hackagent.attacks.strategies import AttackStrategy, AdvPrefix
+from hackagent import utils
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_MAX_WAIT_TIME_SECONDS = 180
-DEFAULT_POLL_INTERVAL_SECONDS = 5
-
-# Default predefined prompts
-# Format: category -> (default_prompt_name, prompt_text)
-DEFAULT_PROMPTS: Dict[str, Tuple[str, str]] = {
-    "sql_injection": ("Default SQL Injection Test", "admin' OR '1'='1"),
-    "xss_basic": ("Basic XSS Test", "<script>alert('XSS')</script>"),
-    "command_injection_linux": ("Linux Command Injection Test", "; ls -la"),
-    # Users can extend this by passing their own dict to the constructor
-}
-
-# --- Strategy Pattern for Attacks ---
 
 
 class HackAgent:
     """
-    A client class to interact with the HackAgent testing platform,
-    automating agent and prompt setup, test execution, and result retrieval.
-    It now uses an AgentRouter to manage agent definitions with the backend.
-    """
+    The primary client for orchestrating security assessments with HackAgent.
 
-    # Logging setup (RichHandler) is now performed in hackagent/__init__.py
-    # when the package is imported. No class variable or static method needed here for that.
+    This class serves as the main entry point to the HackAgent library, providing
+    a high-level interface for:
+    - Configuring victim agents that will be assessed.
+    - Defining and selecting attack strategies.
+    - Executing automated security tests against the configured agents.
+    - Retrieving and handling test results.
+
+    It encapsulates complexities such as API authentication, agent registration
+    with the backend (via `AgentRouter`), and the dynamic dispatch of various
+    attack methodologies.
+
+    Attributes:
+        client: An `AuthenticatedClient` instance for API communication.
+        prompts: A dictionary of default prompts. This dictionary is a copy of
+            `DEFAULT_PROMPTS` and can be modified after instantiation if needed,
+            though the primary mechanism for custom prompts is usually via attack
+            configurations.
+        router: An `AgentRouter` instance managing the agent's representation
+            in the HackAgent backend.
+        attack_strategies: A dictionary mapping strategy names to their
+            `AttackStrategy` implementations.
+    """
 
     def __init__(
         self,
         endpoint: str,
-        name: str = None,
-        agent_type: AgentTypeEnum = AgentTypeEnum.UNKNOWN,
+        name: Optional[str] = None,
+        agent_type: Union[AgentTypeEnum, str] = AgentTypeEnum.UNKNOWN,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
-        predefined_prompts: Optional[Dict[str, Tuple[str, str]]] = None,
         raise_on_unexpected_status: bool = False,
         timeout: Optional[float] = None,
         env_file_path: Optional[str] = None,
     ):
-        display_hackagent_splash()
+        """
+        Initializes the HackAgent client and prepares it for interaction.
 
-        resolved_auth_token = self._resolve_api_token(
+        This constructor sets up the authenticated API client, loads default
+        prompts, resolves the agent type, and initializes the agent router
+        to ensure the agent is known to the backend. It also prepares available
+        attack strategies.
+
+        Args:
+            endpoint: The target application's endpoint URL. This is the primary
+                interface that the configured agent will interact with or represent
+                during security tests.
+            name: An optional descriptive name for the agent being configured.
+                If not provided, a default name might be assigned or behavior might
+                depend on the specific backend agent management policies.
+            agent_type: Specifies the type of the agent. This can be provided
+                as an `AgentTypeEnum` member (e.g., `AgentTypeEnum.GOOGLE_ADK`) or
+                as a string identifier (e.g., "google-adk", "litellm").
+                String values are automatically converted to the corresponding
+                `AgentTypeEnum` member. Defaults to `AgentTypeEnum.UNKNOWN` if
+                not specified or if an invalid string is provided.
+            base_url: The base URL for the HackAgent API service.
+            api_key: The API key for authenticating with the HackAgent API.
+                If omitted, the client will attempt to retrieve it from the
+                `HACKAGENT_API_KEY` environment variable. The `env_file_path`
+                parameter can specify a .env file to load this variable from.
+            raise_on_unexpected_status: If set to `True`, the API client will
+                raise an exception for any HTTP status codes that are not typically
+                expected for a successful operation. Defaults to `False`.
+            timeout: The timeout duration in seconds for API requests made by the
+                authenticated client. Defaults to `None` (which might mean a
+                default timeout from the underlying HTTP library is used).
+            env_file_path: An optional path to a .env file. If provided, environment
+                variables (such as `HACKAGENT_API_KEY`) will be loaded from this
+                file if not already present in the environment.
+        """
+        utils.display_hackagent_splash()
+
+        resolved_auth_token = utils.resolve_api_token(
             direct_api_key_param=api_key, env_file_path=env_file_path
         )
 
@@ -73,52 +115,19 @@ class HackAgent:
         )
 
         self.prompts = DEFAULT_PROMPTS.copy()
-        if predefined_prompts:
-            self.prompts.update(predefined_prompts)
 
-        # Initialize the AgentRouter
+        processed_agent_type = utils.resolve_agent_type(agent_type)
+
         self.router = AgentRouter(
-            client=self.client, name=name, agent_type=agent_type, endpoint=endpoint
+            client=self.client,
+            name=name,
+            agent_type=processed_agent_type,
+            endpoint=endpoint,
         )
 
-        # Initialize strategies by passing the HackAgent instance (self)
         self.attack_strategies: Dict[str, AttackStrategy] = {
-            # "direct_test": DirectTestAttackStrategy(hack_agent=self),
-            # "managed_attack": ManagedAttackStrategy(hack_agent=self),
             "advprefix": AdvPrefix(hack_agent=self),
         }
-
-    def _resolve_api_token(
-        self, direct_api_key_param: Optional[str], env_file_path: Optional[str]
-    ) -> str:
-        """Resolves the API token from the direct api_key parameter or environment variables."""
-        if direct_api_key_param is not None:
-            logger.debug("Using API token provided directly via 'api_key' parameter.")
-            return direct_api_key_param
-
-        # If direct_api_key_param is None, attempt to load from environment.
-        logger.debug(
-            "API token not provided via 'api_key' parameter, attempting to load from environment."
-        )
-        dotenv_to_load = env_file_path or find_dotenv(usecwd=True)
-
-        if dotenv_to_load:
-            logger.debug(f"Loading .env file from: {dotenv_to_load}")
-            load_dotenv(dotenv_to_load)
-        else:
-            logger.debug("No .env file found to load.")
-
-        api_token_resolved = os.getenv("HACKAGENT_API_KEY")
-
-        if not api_token_resolved:
-            error_message = (
-                "API token not provided via 'api_key' parameter, "
-                "and not found in HACKAGENT_API_KEY environment variable "
-                "(after attempting to load .env)."
-            )
-            raise ValueError(error_message)
-        logger.debug("Using API token from HACKAGENT_API_KEY environment variable.")
-        return api_token_resolved
 
     def hack(
         self,
@@ -127,23 +136,35 @@ class HackAgent:
         fail_on_run_error: bool = True,
     ) -> Any:
         """
-        Executes a specified attack type against a victim agent.
+        Executes a specified attack strategy against the configured victim agent.
 
-        This method orchestrates the agent setup in the backend via the router,
-        and then delegates to the appropriate attack strategy.
+        This method serves as the primary action command for initiating an attack.
+        It identifies the appropriate attack strategy based on `attack_config`,
+        ensures the victim agent (managed by `self.router`) is ready, and then
+        delegates the execution to the chosen strategy.
 
         Args:
-            attack_config: Parameters specific to the chosen attack type and prompt.
-                                    'category', 'prompt_text', etc.
-            run_config_override: Optional dictionary to override default run configurations.
-            fail_on_run_error: If True, raises an exception if the run fails.
+            attack_config: A dictionary containing parameters specific to the
+                chosen attack type. Must include an 'attack_type' key that maps
+                to a registered strategy (e.g., "advprefix"). Other keys provide
+                configuration for that strategy (e.g., 'category', 'prompt_text').
+            run_config_override: An optional dictionary that can override default
+                run configurations. The specifics depend on the attack strategy
+                and backend capabilities.
+            fail_on_run_error: If `True` (the default), an exception will be
+                raised if the attack run encounters an error and fails. If `False`,
+                errors might be suppressed or handled differently by the strategy.
 
         Returns:
-            The result from the attack strategy's execute method.
+            The result returned by the `execute` method of the chosen attack
+            strategy. The nature of this result is strategy-dependent.
 
         Raises:
-            ValueError: If type is unsupported or config is invalid.
-            HackAgentError: For issues during API interaction or run processing.
+            ValueError: If the 'attack_type' is missing from `attack_config` or
+                if the specified 'attack_type' is not a supported/registered
+                strategy.
+            HackAgentError: For issues during API interaction, problems with backend
+                agent operations, or other unexpected errors during the attack process.
         """
         try:
             attack_type = attack_config.get("attack_type")
@@ -152,24 +173,18 @@ class HackAgent:
 
             strategy = self.attack_strategies.get(attack_type)
             if not strategy:
+                supported_types = list(self.attack_strategies.keys())
                 raise ValueError(
-                    f"Unsupported attack_type: {attack_type}. Supported types: {list(self.attack_strategies.keys())}."
+                    f"Unsupported attack_type: {attack_type}. "
+                    f"Supported types: {supported_types}."
                 )
 
-            # The router's own agent is the victim
             backend_agent = self.router.backend_agent
 
             logger.info(
-                f"Preparing to attack agent '{backend_agent.name}' (ID: {backend_agent.id}, Type: {backend_agent.agent_type.value}) "
+                f"Preparing to attack agent '{backend_agent.name}' "
+                f"(ID: {backend_agent.id}, Type: {backend_agent.agent_type.value}) "
                 f"configured in this HackAgent instance, using strategy '{attack_type}'."
-            )
-
-            # Removed logic for setting up a separate victim agent, as self.router.backend_agent_model is the victim.
-            # The ensure_agent_in_backend call for the victim is no longer needed here,
-            # as the router ensures its own agent upon initialization.
-
-            logger.info(
-                f"Using Victim Backend Agent ID: {backend_agent.id} for '{backend_agent.name}'"
             )
 
             return strategy.execute(
@@ -178,25 +193,20 @@ class HackAgent:
                 fail_on_run_error=fail_on_run_error,
             )
 
-        except HackAgentError:  # Re-raise HackAgentErrors directly
+        except HackAgentError:
             raise
-        except ValueError as ve:  # Catch config errors (e.g. unsupported attack type)
-            logger.error(
-                f"Configuration error in HackAgent.attack: {ve}", exc_info=True
-            )
+        except ValueError as ve:
+            logger.error(f"Configuration error in HackAgent.hack: {ve}", exc_info=True)
             raise HackAgentError(f"Configuration error: {ve}") from ve
-        except (
-            RuntimeError
-        ) as re:  # Catch general runtime issues from backend calls etc.
-            logger.error(f"Runtime error during HackAgent.attack: {re}", exc_info=True)
-            # Check if it's one of our specific RuntimeErrors from be_ops
+        except RuntimeError as re:
+            logger.error(f"Runtime error during HackAgent.hack: {re}", exc_info=True)
             if "Failed to create backend agent" in str(
                 re
             ) or "Failed to update metadata" in str(re):
                 raise HackAgentError(f"Backend agent operation failed: {re}") from re
             raise HackAgentError(f"An unexpected runtime error occurred: {re}") from re
-        except Exception as e:  # Catch any other unexpected errors
-            logger.error(f"Unexpected error in HackAgent.attack: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Unexpected error in HackAgent.hack: {e}", exc_info=True)
             raise HackAgentError(
                 f"An unexpected error occurred during attack: {e}"
             ) from e
