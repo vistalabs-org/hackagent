@@ -1,3 +1,18 @@
+## v0.2.3 (2025-05-21)
+
+### 🐛🚑️ Fixes
+
+- **minor**: url for generator
+- **ruff**: linting
+
+### ♻️ Refactorings
+
+- **api**: adding judge and generator within the api
+
+### ✅🤡🧪 Tests
+
+- **coverage**: reduced the minimum coverage to 40
+
 ## v0.2.2 (2025-05-21)
 
 ### ♻️ Refactorings
