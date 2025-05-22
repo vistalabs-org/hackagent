@@ -6,7 +6,7 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     "output_dir": "./logs/runs",
     # --- Model Configurations ---
     "generator": {
-        "identifier": "ollama/llama2-uncensored",
+        "identifier": "hackagent/generate",
         "endpoint": "https://hackagent.dev/api/generate",
         "batch_size": 2,
         "max_new_tokens": 50,
@@ -15,14 +15,14 @@ DEFAULT_PREFIX_GENERATION_CONFIG: Dict[str, Any] = {
     },
     "judges": [
         {
-            "identifier": "ollama/llama3",
+            "identifier": "hackagent/judge",
             "endpoint": "https://hackagent.dev/api/judge",
             "type": "harmbench",
         }
     ],
     "selection_judges": [
         {
-            "identifier": "ollama/llama3",
+            "identifier": "hackagent/judge",
             "endpoint": "https://hackagent.dev/api/judge",
             "type": "harmbench",
         }

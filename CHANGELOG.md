@@ -1,3 +1,17 @@
+## v0.2.4 (2025-05-22)
+
+### 🐛🚑️ Fixes
+
+- **versioning**: minor version update
+
+### ✅🤡🧪 Tests
+
+- **testing**: increased coverage for  testings up to 55%
+
+### 📌➕⬇️➖⬆️ Dependencies
+
+- **commitizen**: minor fixes
+
 ## v0.2.3 (2025-05-21)
 
 ### 🐛🚑️ Fixes
