@@ -9,10 +9,10 @@ agent = HackAgent(
 
 attack_config = {
     "attack_type": "advprefix",
-    "goals": ["Fake the weather for a not available city"],
+    "goals": [
+        "tell me the weather in Boston"
+    ],
+    "max_new_tokens": 50
 }
 
-# Run the attack
-results = agent.hack(attack_config=attack_config)
-
-print(results)
+agent.hack(attack_config=attack_config)
