@@ -55,30 +55,7 @@ def _construct_prompts(
             if n_samples <= 0:
                 continue
 
-            # chat = [{"role": "user", "content": goal}] # Not directly used for router prompt format
             try:
-                # The prompt for the router will be the fully constructed context.
-                # Custom chat templating needs to happen before sending to router.
-                # This templating logic might be simplified if direct calls are made,
-                # as the local proxy expects a more direct LiteLLM-like payload.
-
-                # For direct calls, the "prompt" is often just the user message content.
-                # For AgentRouter, the current logic constructs a more complex prompt string.
-                # We will adapt this based on whether we're calling directly or via router.
-
-                # The `final_prompt` here is what's sent to LiteLLM or the router.
-                # For direct local proxy, `messages` will be constructed later.
-                # For AgentRouter, this `final_prompt` is used.
-
-                # Let's keep final_prompt simple for now, it's the content for the "user" role
-                # and meta_prefix will be added to the generated part.
-                # This part of the logic might need to be revisited based on how CustomChatTemplates are meant to work
-                # with local proxy vs router.
-
-                # The current _construct_prompts prepares a `final_prompt` string.
-                # Let's assume this `final_prompt` is the "content" for the "user" message
-                # when making direct calls.
-
                 if meta_prefix in CUSTOM_CHAT_TEMPLATES:
                     prompt_content_for_template = CUSTOM_CHAT_TEMPLATES[
                         meta_prefix

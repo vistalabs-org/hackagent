@@ -30,6 +30,8 @@ commitizen = "^4.7.1"
 cz-conventional-gitmoji = "^0.7.0"
 pytest-cov = "^6.1.1"
 google-adk = "^0.5.0"
+anyio = "^4.3.0"
+pytest-asyncio = "^0.23.7"
 
 [tool.commitizen]
 name = "cz_gitmoji"
@@ -61,3 +63,5 @@ exclude_lines = [
 
 [tool.coverage.xml]
 output = "reports/coverage.xml"
+
+[tool.pytest.ini_options]

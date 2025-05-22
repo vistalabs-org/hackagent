@@ -77,45 +77,33 @@ class BaseEvaluator(ABC):
         self.underlying_httpx_client = self.client.get_httpx_client()
 
         self.is_local_judge_proxy_defined = False
-        self.actual_api_key: Optional[str] = None
+        self.actual_api_key: str = client.token
 
-        if self.config.agent_endpoint and (
-            "localhost:8888/api/judge" in self.config.agent_endpoint
-            or "127.0.0.1:8888/api/judge" in self.config.agent_endpoint
-        ):
+        api_key_config_value = self.config.agent_metadata.get("api_key")
+
+        if api_key_config_value:
+            env_key_value = os.environ.get(api_key_config_value)
+            if env_key_value:
+                self.actual_api_key = env_key_value
+                self.logger.info(
+                    f"Loaded API key for generator from environment variable: {api_key_config_value}"
+                )
+            else:
+                self.actual_api_key = api_key_config_value
+                self.logger.info(
+                    f"Using provided value directly as API key for generator (not found as env var: {api_key_config_value[:5]}...)."
+                )
+
+        print("config.agent_endpoint", self.config.agent_endpoint)
+        is_local_proxy_defined = bool(
+            self.config.agent_endpoint == "https://hackagent.dev/api/judge"
+        )
+
+        if is_local_proxy_defined:
             self.is_local_judge_proxy_defined = True
             self.logger.info(
                 f"Local judge proxy detected for '{self.config.agent_name}' at: {self.config.agent_endpoint}"
             )
-
-            if self.config.agent_metadata:
-                direct_api_key = self.config.agent_metadata.get("api_key")
-                api_key_env_var = self.config.agent_metadata.get("api_key_env_var")
-
-                if direct_api_key:
-                    self.actual_api_key = direct_api_key
-                    self.logger.info(
-                        f"Using direct API key for local judge proxy '{self.config.agent_name}'."
-                    )
-                elif api_key_env_var:
-                    env_key_value = os.environ.get(api_key_env_var)
-                    if env_key_value:
-                        self.actual_api_key = env_key_value
-                        self.logger.info(
-                            f"Loaded API key for local judge proxy '{self.config.agent_name}' from env var: {api_key_env_var}"
-                        )
-                    else:
-                        self.logger.warning(
-                            f"Env var {api_key_env_var} for local judge proxy '{self.config.agent_name}' API key not found."
-                        )
-                else:
-                    self.logger.warning(
-                        f"Local judge proxy '{self.config.agent_name}' detected, but no 'api_key' or 'api_key_env_var' found in agent_metadata."
-                    )
-            else:
-                self.logger.warning(
-                    f"Local judge proxy '{self.config.agent_name}' detected, but agent_metadata is missing for API key."
-                )
 
             if not self.actual_api_key:
                 self.is_local_judge_proxy_defined = (
@@ -497,8 +485,12 @@ Based on these criteria, please provide your classification. You should first br
         super().__init__(client, config)
         if not self.config.model_id:  # Ensure model_id is present
             raise ValueError("NuancedEvaluator requires a model_id in the config.")
-        if not self.agent_router or not self.agent_registration_key:
-            raise RuntimeError("AgentRouter not initialized for NuancedEvaluator.")
+        if not (self.is_local_judge_proxy_defined and self.actual_api_key) and (
+            not self.agent_router or not self.agent_registration_key
+        ):
+            raise RuntimeError(
+                "AgentRouter not initialized for NuancedEvaluator and local proxy not available/functional."
+            )
 
     def _get_request_data_for_row(self, row: pd.Series) -> Dict[str, Any]:
         prompt_content = self.PROMPT.format(
@@ -630,9 +622,11 @@ Answer with either 'safe' or 'unsafe' and nothing else (in particular, never sta
             raise ValueError(
                 "JailbreakBenchEvaluator requires a model_id in the config."
             )
-        if not self.agent_router or not self.agent_registration_key:
+        if not (self.is_local_judge_proxy_defined and self.actual_api_key) and (
+            not self.agent_router or not self.agent_registration_key
+        ):
             raise RuntimeError(
-                "AgentRouter not initialized for JailbreakBenchEvaluator."
+                "AgentRouter not initialized for JailbreakBenchEvaluator and local proxy not available/functional."
             )
 
     def _get_request_data_for_row(self, row: pd.Series) -> Dict[str, Any]:
@@ -732,8 +726,12 @@ Answer with only "yes" or "no"."""
             )
             # Depending on strictness, could raise ValueError here
             # raise ValueError("HarmBenchEvaluator requires a model_id in the config.")
-        if not self.agent_router or not self.agent_registration_key:
-            raise RuntimeError("AgentRouter not initialized for HarmBenchEvaluator.")
+        if not (self.is_local_judge_proxy_defined and self.actual_api_key) and (
+            not self.agent_router or not self.agent_registration_key
+        ):
+            raise RuntimeError(
+                "AgentRouter not initialized for HarmBenchEvaluator and local proxy not available/functional."
+            )
 
         # model_id processing (like adding provider prefix) should ideally happen when creating
         # the EvaluatorConfig instance before passing it here, or handled by the LiteLLMAgentAdapter itself.

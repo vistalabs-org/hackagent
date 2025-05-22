@@ -21,7 +21,7 @@ _rich_handler_configured_for_package = False
 
 
 def setup_package_logging(
-    logger_name: str = "hackagent", default_level_str: str = "INFO"
+    logger_name: str = "hackagent", default_level_str: str = "WARNING"
 ):
     """Configures RichHandler for the specified logger if not already set."""
     global _rich_handler_configured_for_package
