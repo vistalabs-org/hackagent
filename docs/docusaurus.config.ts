@@ -86,7 +86,7 @@ const config: Config = {
       title: 'HackAgent',
       logo: {
         alt: 'HackAgent Logo',
-        src: 'img/raccoon.png',
+        src: 'img/logo.png',
         href: 'https://hackagent.dev',
         target: '_blank',
       },
