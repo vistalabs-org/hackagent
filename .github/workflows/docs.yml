@@ -102,7 +102,7 @@ jobs:
           # Check if project exists, create if it doesn't
           if ! wrangler pages project list | grep -q "$PROJECT_NAME"; then
             echo "Creating Cloudflare Pages project: $PROJECT_NAME"
-            wrangler pages project create "$PROJECT_NAME" --compatibility-date 2024-01-01
+            wrangler pages project create "$PROJECT_NAME" --production-branch main --compatibility-date 2024-01-01
           else
             echo "Project $PROJECT_NAME already exists"
           fi
