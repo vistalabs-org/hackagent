@@ -27,7 +27,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: 'docs/package-lock.json'
 
@@ -88,7 +88,7 @@ jobs:
       - name: Setup Node.js for Wrangler
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install Wrangler
         run: npm install -g wrangler
