@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/banner.png" alt="Hack Agent" width=400></img>
+<img src="https://docs.hackagent.dev/img/banner.png" alt="Hack Agent" width=400></img>
 
 
   ⚔️
@@ -9,7 +9,7 @@
 
 <br>
 
-![ico](./assets/favicon.ico) [Web App][Web App] -- [Docs][Docs] ![ico](./assets/favicon.ico)
+![ico](https://docs.hackagent.dev/img/favicon.ico) [Web App][Web App] -- [Docs][Docs] ![ico](https://docs.hackagent.dev/img/favicon.ico)
 
 [Web App]: https://hackagent.dev/
 [Docs]: https://hackagent.dev/docs/
