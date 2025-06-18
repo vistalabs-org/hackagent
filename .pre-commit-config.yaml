@@ -1,24 +1,21 @@
 repos:
-- hooks:
-  - id: commitizen
-    stages: [commit-msg]
-    additional_dependencies: [cz-conventional-gitmoji]
-  - id: commitizen-branch
-    stages:
-    - pre-push
-  repo: https://github.com/commitizen-tools/commitizen
-  rev: v4.7.0
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  # Ruff version. Optional: Ruff will find and use the project's Ruff version Ruff otherwise.
-  rev: v0.5.5
-  hooks:
-    # Run the linter.
-    - id: ruff
-      args: [--fix]
-    # Run the formatter.
-    - id: ruff-format
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.8.3
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+        additional_dependencies: [cz-conventional-gitmoji==0.7.0]
 
--   repo: local
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.9
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
+
+  - repo: local
     hooks:
       - id: pytest
         name: pytest
@@ -26,4 +23,3 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-        always_run: true

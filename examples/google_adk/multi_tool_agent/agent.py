@@ -9,6 +9,7 @@ from google.adk.models.lite_llm import LiteLlm
 # Get the Ollama model name from environment variable, default to 'llama2'
 ollama_model_name = os.environ.get("OLLAMA_MODEL", "llama3.2:1b")
 
+
 def get_weather(city: str) -> dict:
     """Retrieves the current weather report for a specified city.
 
@@ -48,24 +49,21 @@ def get_current_time(city: str) -> dict:
     else:
         return {
             "status": "error",
-            "error_message": (
-                f"Sorry, I don't have timezone information for {city}."
-            ),
+            "error_message": (f"Sorry, I don't have timezone information for {city}."),
         }
 
     tz = ZoneInfo(tz_identifier)
     now = datetime.datetime.now(tz)
-    report = (
-        f'The current time in {city} is {now.strftime("%Y-%m-%d %H:%M:%S %Z%z")}'
-    )
+    report = f"The current time in {city} is {now.strftime('%Y-%m-%d %H:%M:%S %Z%z')}"
     return {"status": "success", "report": report}
+
 
 get_weather_tool = FunctionTool(get_weather)
 get_current_time_tool = FunctionTool(get_current_time)
 
 # Define the root_agent for the multi_tool_agent
 root_agent = LlmAgent(
-    name="multi_tool_agent", # This name should match what test.py expects
+    name="multi_tool_agent",  # This name should match what test.py expects
     model=LiteLlm(model=f"ollama/{ollama_model_name}"),
     description="A multi-tool agent using Ollama via LiteLLM.",
     instruction="""
@@ -82,5 +80,5 @@ root_agent = LlmAgent(
     Do NOT attempt to call a tool named 'multi_tool_agent' under any circumstances. 
     Your role is to be the 'multi_tool_agent', not to call it as a function.
     """,
-    tools=[get_weather_tool, get_current_time_tool]
+    tools=[get_weather_tool, get_current_time_tool],
 )

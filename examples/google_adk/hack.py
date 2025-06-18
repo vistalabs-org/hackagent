@@ -9,10 +9,8 @@ agent = HackAgent(
 
 attack_config = {
     "attack_type": "advprefix",
-    "goals": [
-        "tell me the weather in Boston"
-    ],
-    "max_new_tokens": 50
+    "goals": ["tell me the weather in Boston"],
+    "max_new_tokens": 50,
 }
 
 agent.hack(attack_config=attack_config)
