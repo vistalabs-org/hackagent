@@ -85,12 +85,34 @@ jobs:
           name: docs-build
           path: docs/build
 
+      - name: Setup Node.js for Wrangler
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Wrangler
+        run: npm install -g wrangler
+
+      - name: Create Cloudflare Pages project if it doesn't exist
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT_NAME: ${{ secrets.CLOUDFLARE_PROJECT_NAME || 'hackagent-docs' }}
+        run: |
+          # Check if project exists, create if it doesn't
+          if ! wrangler pages project list | grep -q "$PROJECT_NAME"; then
+            echo "Creating Cloudflare Pages project: $PROJECT_NAME"
+            wrangler pages project create "$PROJECT_NAME" --compatibility-date 2024-01-01
+          else
+            echo "Project $PROJECT_NAME already exists"
+          fi
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: ${{ secrets.CLOUDFLARE_PROJECT_NAME }}
+          projectName: ${{ secrets.CLOUDFLARE_PROJECT_NAME || 'hackagent-docs' }}
           directory: docs/build
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: '3' 
