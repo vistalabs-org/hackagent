@@ -8,7 +8,7 @@ jobs:
   commit-check:
     name: Commit Messages
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' # Only run on PRs
+    if: github.event_name == 'pull_request'
     steps:
       - name: Check out code with full history
         uses: actions/checkout@v4
