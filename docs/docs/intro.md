@@ -5,7 +5,7 @@ slug: /
 
 # Welcome to HackAgent
 
-**HackAgent** is a red-team testing toolkit aimed at detecting and mitigating security vulnerabilities in AI systems.
+**HackAgent** is a red-team testing toolkit aimed at detecting and mitigating security vulnerabilities in AI agents.
 
 Built for developers, red-teamers, and security engineers, **HackAgent** makes it easy to simulate adversarial inputs, automate prompt fuzzing, and validate the safety of your LLM-powered apps. 
 Whether you're building a chatbot, autonomous agent, or internal LLM service, **HackAgent** helps you **test before attackers do**.
@@ -49,52 +49,41 @@ As AI agents become more sophisticated and integrated into critical systems, the
 
 <div style={{ textAlign: 'center', margin: '2rem 0' }}>
   <img 
-    src="/img/hackagent-workflow.gif" 
+    src="/gifs/terminal.gif" 
     alt="HackAgent Testing Workflow"
     style={{ maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}
   />
   <p><em>See the complete testing workflow in action</em></p>
 </div>
 
-```mermaid
-flowchart TD
-    A["🎯 Define Targets<br/><small>Identify AI systems & vulnerabilities</small>"] --> B["⚔️ Execute Attacks<br/><small>Run AdvPrefix & injection tests</small>"]
-    B --> C["🔍 Analyze Results<br/><small>Review attack success & patterns</small>"]
-    C --> D["📊 Generate Reports<br/><small>Document findings & evidence</small>"]
-    D --> E["🛡️ Implement Fixes<br/><small>Apply security mitigations</small>"]
-    E --> F["🔄 Continuous Monitoring<br/><small>Schedule regular assessments</small>"]
-    F --> A
-    
-    %% Node styling with security-themed colors
-    style A fill:#ff6b6b,stroke:#c92a2a,stroke-width:3px,color:#fff
-    style B fill:#ffa726,stroke:#ef6c00,stroke-width:3px,color:#fff
-    style C fill:#42a5f5,stroke:#1976d2,stroke-width:3px,color:#fff
-    style D fill:#66bb6a,stroke:#388e3c,stroke-width:3px,color:#fff
-    style E fill:#ab47bc,stroke:#7b1fa2,stroke-width:3px,color:#fff
-    style F fill:#26c6da,stroke:#0097a7,stroke-width:3px,color:#fff
-    
-    %% Add arrow styling
-    linkStyle 0 stroke:#c92a2a,stroke-width:3px
-    linkStyle 1 stroke:#ef6c00,stroke-width:3px
-    linkStyle 2 stroke:#1976d2,stroke-width:3px
-    linkStyle 3 stroke:#388e3c,stroke-width:3px
-    linkStyle 4 stroke:#7b1fa2,stroke-width:3px
-    linkStyle 5 stroke:#0097a7,stroke-width:3px
-```
 
 ## 🔥 Core Capabilities
+
+### 🖥️ **Professional Command Line Interface**
+
+<div style={{ display: 'flex', gap: '2rem', alignItems: 'center', margin: '1rem 0', flexWrap: 'wrap' }}>
+  <div style={{ flex: '1', minWidth: '300px' }}>
+    <p>Experience professional-grade command line operations with HackAgent's stunning ASCII logo integration and beautiful terminal branding. The interactive setup wizard guides you through configuration with <code>hackagent init</code>, while rich terminal output featuring tables, progress bars, and colored displays makes complex operations intuitive and visually appealing.</p>
+    
+    <p>Export your results in multiple formats including JSON, CSV, and formatted tables to seamlessly integrate with your existing workflows. Built for enterprise environments, the CLI includes comprehensive audit logging and team management capabilities to support organizational security testing requirements.</p>
+  </div>
+  <div style={{ flex: '1', minWidth: '300px', textAlign: 'center' }}>
+    <img 
+      src="/gifs/terminal.gif" 
+      alt="HackAgent CLI in Action"
+      style={{ maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}
+    />
+    <p><em>HackAgent CLI with beautiful terminal interface</em></p>
+  </div>
+</div>
 
 ### 🔍 **Comprehensive Vulnerability Detection**
 
 <div style={{ display: 'flex', gap: '2rem', alignItems: 'center', margin: '1rem 0', flexWrap: 'wrap' }}>
   <div style={{ flex: '1', minWidth: '300px' }}>
-    <ul>
-      <li><strong>AdvPrefix Attacks</strong>: Advanced prefix generation and optimization</li>
-      <li><strong>Prompt Injection</strong>: Direct and indirect injection attacks</li>
-      <li><strong>Jailbreaking</strong>: Advanced techniques to bypass safety measures</li>
-      <li><strong>Tool Manipulation</strong>: Testing agent tool usage and permissions</li>
-      <li><strong>Context Attacks</strong>: Manipulating conversation context and memory</li>
-    </ul>
+    <p>Discover security vulnerabilities through sophisticated AdvPrefix attacks that employ advanced prefix generation and optimization techniques. Our comprehensive testing suite includes both direct and indirect prompt injection attacks, alongside advanced jailbreaking techniques designed to bypass safety measures and expose hidden vulnerabilities.</p>
+    
+    <p>Test agent tool usage and permissions through targeted tool manipulation attacks, while context attacks systematically probe conversation context and memory handling. Each attack type is carefully crafted to reveal different classes of vulnerabilities, providing complete coverage of potential security weaknesses in AI systems.</p>
   </div>
   <div style={{ flex: '1', minWidth: '300px', textAlign: 'center' }}>
     <img 
@@ -118,22 +107,17 @@ flowchart TD
     <p><em>Professional dashboard with real-time analytics</em></p>
   </div>
   <div style={{ flex: '1', minWidth: '300px' }}>
-    <ul>
-      <li><strong>Multi-Tenant Architecture</strong>: Secure organization-based isolation</li>
-      <li><strong>Professional Dashboard</strong>: Real-time monitoring and analytics</li>
-      <li><strong>Credit-Based Billing</strong>: Pay-per-use with transparent pricing</li>
-      <li><strong>API-First Design</strong>: Complete programmatic access</li>
-      <li><strong>Audit Logging</strong>: Comprehensive security event tracking</li>
-    </ul>
+    <p>Built on a secure multi-tenant architecture that provides organization-based isolation for enterprise environments. The professional dashboard delivers real-time monitoring and analytics capabilities, enabling teams to track security testing progress and results with comprehensive visibility into their AI system vulnerabilities.</p>
+    
+    <p>Transparent credit-based billing operates on a pay-per-use model, while the API-first design ensures complete programmatic access for integration into existing security workflows. Comprehensive audit logging captures all security events and testing activities, providing the accountability and traceability required for enterprise compliance and governance.</p>
   </div>
 </div>
 
 ### 🧪 **Research-Backed Techniques**
 
-- **AdvPrefix Implementation**: Sophisticated multi-step attack pipeline
-- **Academic Integration**: Latest research from security conferences
-- **Community Contributions**: Open-source attack vector library
-- **Continuous Updates**: New techniques added regularly
+Our sophisticated AdvPrefix implementation employs a multi-step attack pipeline based on cutting-edge research methodologies. We continuously integrate the latest findings from academic security conferences and research papers, ensuring our attack vectors remain current with emerging threats and defensive techniques.
+
+The platform benefits from active community contributions through our open-source attack vector library, where security researchers worldwide collaborate to develop and refine new testing methodologies. Regular updates introduce new techniques and attack patterns, keeping pace with the rapidly evolving landscape of AI security challenges and ensuring comprehensive coverage of both established and emerging vulnerability classes.
 
 ### 🔌 **Universal Framework Support**
 
@@ -145,65 +129,6 @@ flowchart TD
 
 ## 🏗️ Platform Architecture
 
-### Full-Stack Security Platform
-
-```mermaid
-graph TB
-    subgraph "🌐 Frontend"
-        A[React Dashboard]
-        B[Documentation Site]
-    end
-    
-    subgraph "🔧 API Layer"
-        C[Django REST API]
-        D[Authentication]
-        E[Rate Limiting]
-    end
-    
-    subgraph "⚔️ Attack Engine"
-        F[AdvPrefix Pipeline]
-        G[Attack Strategies]
-        H[Agent Router]
-        I[Result Evaluation]
-    end
-    
-    subgraph "🤖 AI Integration"
-        J[Google ADK Adapter]
-        K[LiteLLM Adapter]
-        L[OpenAI SDK Adapter]
-        M[Custom Adapters]
-    end
-    
-    subgraph "📊 Data & Analytics"
-        N[PostgreSQL]
-        O[Result Analysis]
-        P[Report Generation]
-    end
-    
-    A --> C
-    B --> C
-    C --> D
-    C --> E
-    C --> F
-    C --> G
-    C --> H
-    C --> I
-    F --> J
-    G --> K
-    H --> L
-    I --> M
-    C --> N
-    N --> O
-    O --> P
-```
-
-### Key Benefits
-
-- **🔒 Security First**: Built with security best practices from the ground up
-- **📈 Scalable**: Handles testing from individual researchers to enterprise teams
-- **🔧 Extensible**: Plugin architecture for custom attack vectors
-- **📚 Well-Documented**: Comprehensive guides for all skill levels
-- **🤝 Community-Driven**: Open source with active community contributions
 
 ## 🎓 Getting Started
 
@@ -218,17 +143,51 @@ graph TB
 
 Choose your path based on your role and needs:
 
-**👨‍💻 Developers & Engineers**
+### 🖥️ **Command Line Interface (CLI)**
+
+**HackAgent CLI** provides a powerful command-line interface for security testing:
+
+```bash
+# Quick setup
+pip install hackagent
+hackagent init                    # Interactive setup wizard
+hackagent config set --api-key YOUR_KEY
+
+# Run security tests
+hackagent attack advprefix \
+  --agent-name "weather-bot" \
+  --agent-type "google-adk" \
+  --endpoint "http://localhost:8000" \
+  --goals "Return fake weather data"
+
+# Manage agents and view results
+hackagent agent list              # List all agents
+hackagent results list            # View attack results
+```
+
+**CLI Features:**
+- 🎨 **Beautiful ASCII Logo** - Branded experience with HackAgent styling
+- 🔧 **Interactive Setup** - Guided configuration with `hackagent init`
+- 📊 **Rich Output** - Tables, progress bars, and colored terminal output
+- 🔗 **Multiple Formats** - Export results as JSON, CSV, or tables
+- ⚙️ **Flexible Config** - Support for config files, environment variables, and CLI args
+
+### 👨‍💻 **Developers & Engineers**
 - Start with the [Quick Start Guide](./HowTo.md) to get running in 5 minutes
+- Try the **CLI**: `pip install hackagent && hackagent init`
+- Read the [Complete CLI Documentation](./cli/README.md) for all features
 - Follow the [Python SDK Guide](./sdk/python-quickstart.md) for programmatic testing
 - Check [Google ADK Integration](./integrations/google-adk.md) for framework-specific setup
 
-**🔐 Security Researchers**
+### 🔐 **Security Researchers**
+- **CLI Quick Start**: `hackagent attack advprefix --help` for attack options
+- **Full CLI Guide**: [CLI Documentation](./cli/README.md) covers all commands and advanced usage
 - Learn [Attack Techniques](./tutorial-basics/AdvPrefix) and core attack vectors
 - Explore [AdvPrefix Attacks](./attacks/advprefix-attacks.md) for advanced techniques
 - Review [Responsible Use Guidelines](./security/responsible-disclosure.md)
 
-**🏢 Organizations & Teams**
+### 🏢 **Organizations & Teams**
+- **Enterprise CLI**: [CLI Documentation](./cli/README.md) covers team management and audit logging
 - Review our [Responsible Use](./security/responsible-disclosure.md) framework
 - Understand the platform's security-first approach
 - Contact us at [devs@vista-labs.ai](mailto:devs@vista-labs.ai) for enterprise support
@@ -322,7 +281,11 @@ We are committed to responsible AI security research:
 
 ---
 
-**Ready to secure your AI agents?** Start with our [5-minute quick start guide](./HowTo.md) or dive deep into our [Python SDK documentation](./sdk/python-quickstart.md).
+**Ready to secure your AI agents?** 
+
+**🖥️ CLI Users:** `pip install hackagent && hackagent init` to get started in seconds
+
+**🐍 Python Developers:** Start with our [5-minute quick start guide](./HowTo.md) or dive into our [Python SDK documentation](./sdk/python-quickstart.md)
 
 **Have questions?** Join our [community discussions](https://github.com/vistalabs-org/hackagent/discussions) or reach out to our team at [devs@vista-labs.ai](mailto:devs@vista-labs.ai).
 

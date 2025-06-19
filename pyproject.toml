@@ -12,6 +12,9 @@ include = [
     { path = "assets/*" }
 ]
 
+[tool.poetry.scripts]
+hackagent = "hackagent.cli.main:cli"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 requests = "^2.31.0"
@@ -20,6 +23,8 @@ litellm = "^1.69.2"
 python-dotenv = "^1.1.0"
 rich = "^14.0.0"
 pandas = "^2.2.3"
+click = "^8.1.0"
+pyyaml = "^6.0.0"
 
 [tool.poetry.group.dev.dependencies]
 openapi-python-client = ">=0.24.3,<0.26.0"

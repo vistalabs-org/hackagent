@@ -7,6 +7,16 @@ import uuid
 from hackagent.client import AuthenticatedClient
 from hackagent.router.router import AgentRouter, AgentTypeEnum
 
+# --- Import Rich progress bar components ---
+from rich.progress import (
+    Progress,
+    BarColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    MofNCompleteColumn,
+    SpinnerColumn,
+)
+
 # --- Remove old ADK utility imports and ADK_REFUSAL_KEYWORDS import ---
 # from hackagent.api.utils import ADK_REFUSAL_KEYWORDS # Removed this import
 
@@ -112,38 +122,55 @@ def execute(
         f"Executing {len(input_df)} ADK acceptability scoring requests sequentially..."
     )
 
-    # Synchronous loop instead of asyncio.gather
-    for index, row in input_df.iterrows():
-        prefix = row["prefix"]
-        try:
-            result = _get_adk_acceptability_via_router(
-                router=agent_router,
-                agent_reg_key=victim_agent_reg_key,
-                prefix_text=prefix,
-                user_id=step_user_id,
-                session_id=step_session_id,
-                request_timeout=request_timeout,
-                logger_instance=logger,
-                original_index=index,
-            )
-            interaction_results_list.append(result)
-        except Exception as e:
-            logger.error(
-                f"Exception during synchronous ADK acceptability scoring for original index {index}: {e}",
-                exc_info=e,
-            )
-            interaction_results_list.append(
-                {
-                    "score": float("inf"),
-                    "request_payload": None,
-                    "response_status_code": None,
-                    "response_headers": None,
-                    "response_body_raw": None,
-                    "adk_events_list": None,
-                    "error_message": f"Sync Task Exception: {type(e).__name__} - {str(e)}",
-                    "log_message": None,
-                }
-            )
+    # Create progress bar for ADK acceptability scoring
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
+        TimeRemainingColumn(),
+    ) as progress_bar:
+        task = progress_bar.add_task(
+            f"[blue]Step 4: Computing cross-entropy via {agent_router.backend_agent.agent_type.value} agent...",
+            total=len(input_df),
+        )
+
+        # Synchronous loop instead of asyncio.gather
+        for index, row in input_df.iterrows():
+            prefix = row["prefix"]
+            try:
+                result = _get_adk_acceptability_via_router(
+                    router=agent_router,
+                    agent_reg_key=victim_agent_reg_key,
+                    prefix_text=prefix,
+                    user_id=step_user_id,
+                    session_id=step_session_id,
+                    request_timeout=request_timeout,
+                    logger_instance=logger,
+                    original_index=index,
+                )
+                interaction_results_list.append(result)
+            except Exception as e:
+                logger.error(
+                    f"Exception during synchronous ADK acceptability scoring for original index {index}: {e}",
+                    exc_info=e,
+                )
+                interaction_results_list.append(
+                    {
+                        "score": float("inf"),
+                        "request_payload": None,
+                        "response_status_code": None,
+                        "response_headers": None,
+                        "response_body_raw": None,
+                        "adk_events_list": None,
+                        "error_message": f"Sync Task Exception: {type(e).__name__} - {str(e)}",
+                        "log_message": None,
+                    }
+                )
+
+            # Update progress bar after each scoring request
+            progress_bar.update(task, advance=1)
 
     logger.info("All ADK acceptability scoring requests processed.")
 

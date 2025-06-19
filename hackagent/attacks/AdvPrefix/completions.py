@@ -6,6 +6,16 @@ from typing import Dict, Any, Optional, List  # Added List
 # --- Import AgentRouter and related components ---
 from hackagent.router.router import AgentRouter, AgentTypeEnum
 
+# --- Import Rich progress bar components ---
+from rich.progress import (
+    Progress,
+    BarColumn,
+    TextColumn,
+    TimeRemainingColumn,
+    MofNCompleteColumn,
+    SpinnerColumn,
+)
+
 
 # Constants for surrogate prompts
 SURROGATE_ATTACK_PROMPTS = {
@@ -247,50 +257,67 @@ def execute(
     completion_results_list: List[Dict[str, Any]] = []
     logger.info(f"Executing {len(input_df)} completion requests sequentially...")
 
-    for index, row in input_df.iterrows():
-        prefix_text = row["prefix"]
-        # 'goal' might not be directly used if surrogate_prompt_template is complex or prefix_text is already combined
-        # goal_text = row.get("goal", "") # Ensure goal is available if needed by prompt construction
+    # Create progress bar for agent interactions
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.1f}%"),
+        TimeRemainingColumn(),
+    ) as progress_bar:
+        task = progress_bar.add_task(
+            f"[green]Step 6: Getting completions from {victim_agent_type.value} agent...",
+            total=len(input_df),
+        )
 
-        try:
-            # n_samples handling: If n_samples_per_prefix > 1, the _get_completion_via_router (and adapter) needs to support it.
-            # Currently, it makes one call per row in input_df. If input_df is already expanded for samples, this is fine.
-            # If input_df has one row per unique prefix, and n_samples_per_prefix > 1, this loop needs to run n_samples_per_prefix times
-            # or _get_completion_via_router must handle requesting n_samples from the adapter.
-            # Assuming input_df might be pre-expanded or n_samples=1 for this synchronous version for simplicity.
-            # If n_samples > 1 and not pre-expanded, this will only get 1 sample per prefix.
-            result = _get_completion_via_router(
-                agent_router=agent_router,
-                agent_reg_key=victim_agent_reg_key,
-                prefix_text=prefix_text,
-                surrogate_prompt_template=actual_surrogate_prompt_str,
-                user_id=step_user_id_adk,
-                session_id=step_session_id_adk,
-                request_timeout=request_timeout,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                n_samples=1,  # Forcing 1 for this simple loop; adapter might take n_samples_per_prefix
-                logger_instance=logger,
-                original_index=index,
-            )
-            completion_results_list.append(result)
-        except Exception as e:
-            logger.error(
-                f"Exception during synchronous completion for original index {index}: {e}",
-                exc_info=e,
-            )
-            completion_results_list.append(
-                {
-                    "completion": None,
-                    "raw_request_payload": None,
-                    "raw_response_status": None,
-                    "raw_response_headers": None,
-                    "raw_response_body": None,
-                    "adapter_specific_events": None,
-                    "error_message": f"Sync Task Exception: {type(e).__name__} - {str(e)}",
-                    "log_message": None,
-                }
-            )
+        for index, row in input_df.iterrows():
+            prefix_text = row["prefix"]
+            # 'goal' might not be directly used if surrogate_prompt_template is complex or prefix_text is already combined
+            # goal_text = row.get("goal", "") # Ensure goal is available if needed by prompt construction
+
+            try:
+                # n_samples handling: If n_samples_per_prefix > 1, the _get_completion_via_router (and adapter) needs to support it.
+                # Currently, it makes one call per row in input_df. If input_df is already expanded for samples, this is fine.
+                # If input_df has one row per unique prefix, and n_samples_per_prefix > 1, this loop needs to run n_samples_per_prefix times
+                # or _get_completion_via_router must handle requesting n_samples from the adapter.
+                # Assuming input_df might be pre-expanded or n_samples=1 for this synchronous version for simplicity.
+                # If n_samples > 1 and not pre-expanded, this will only get 1 sample per prefix.
+                result = _get_completion_via_router(
+                    agent_router=agent_router,
+                    agent_reg_key=victim_agent_reg_key,
+                    prefix_text=prefix_text,
+                    surrogate_prompt_template=actual_surrogate_prompt_str,
+                    user_id=step_user_id_adk,
+                    session_id=step_session_id_adk,
+                    request_timeout=request_timeout,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    n_samples=1,  # Forcing 1 for this simple loop; adapter might take n_samples_per_prefix
+                    logger_instance=logger,
+                    original_index=index,
+                )
+                completion_results_list.append(result)
+            except Exception as e:
+                logger.error(
+                    f"Exception during synchronous completion for original index {index}: {e}",
+                    exc_info=e,
+                )
+                completion_results_list.append(
+                    {
+                        "completion": None,
+                        "raw_request_payload": None,
+                        "raw_response_status": None,
+                        "raw_response_headers": None,
+                        "raw_response_body": None,
+                        "adapter_specific_events": None,
+                        "error_message": f"Sync Task Exception: {type(e).__name__} - {str(e)}",
+                        "log_message": None,
+                    }
+                )
+
+            # Update progress bar after each completion
+            progress_bar.update(task, advance=1)
 
     logger.info("All completion requests processed.")
 
