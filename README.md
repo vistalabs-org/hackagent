@@ -12,7 +12,7 @@
 ![ico](https://docs.hackagent.dev/img/favicon.ico) [Web App][Web App] -- [Docs][Docs] ![ico](https://docs.hackagent.dev/img/favicon.ico)
 
 [Web App]: https://hackagent.dev/
-[Docs]: https://hackagent.dev/docs/
+[Docs]: https://docs.hackagent.dev/
 
 <br>
 

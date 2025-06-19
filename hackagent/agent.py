@@ -100,7 +100,6 @@ class HackAgent:
                 variables (such as `HACKAGENT_API_KEY`) will be loaded from this
                 file if not already present in the environment.
         """
-        utils.display_hackagent_splash()
 
         resolved_auth_token = utils.resolve_api_token(
             direct_api_key_param=api_key, env_file_path=env_file_path
