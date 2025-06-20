@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # --- Agent Type to Adapter Mapping ---
 AGENT_TYPE_TO_ADAPTER_MAP: Dict[AgentTypeEnum, Type[Agent]] = {
     AgentTypeEnum.GOOGLE_ADK: ADKAgentAdapter,
-    AgentTypeEnum.LITELMM: LiteLLMAgentAdapter,
+    AgentTypeEnum.LITELLM: LiteLLMAgentAdapter,
     # AgentTypeEnum.OPENAI: OpenAIAgentAdapter, # Example for future
     # Add other agent types and their corresponding adapters here
 }
@@ -251,11 +251,11 @@ class AgentRouter:
                 for backend registration and can also be used by the adapter.
             metadata: Optional. Metadata to be stored with the agent's record in the
                 backend. Structure can vary by agent type. For example, for
-                `AgentTypeEnum.LITELMM`, this might include `{'model_name': ..., 'api_key_env_var': ...}`.
+                `AgentTypeEnum.LITELLM`, this might include `{'model_name': ..., 'api_key_env_var': ...}`.
             adapter_operational_config: Optional. Runtime configuration specific to the
                 adapter instance. This can override or augment values derived from
                 the backend agent's metadata. For `AgentTypeEnum.GOOGLE_ADK`, this might
-                include `{'user_id': ..., 'session_id': ...}`. For `AgentTypeEnum.LITELMM`,
+                include `{'user_id': ..., 'session_id': ...}`. For `AgentTypeEnum.LITELLM`,
                 it must provide the model string ('name') if not in backend metadata.
             overwrite_metadata: If `True` (default), and an agent with the same name,
                 type, and organization already exists in the backend, its metadata
@@ -366,7 +366,7 @@ class AgentRouter:
                 )
                 adapter_instance_config["user_id"] = self.user_id_str
 
-        elif agent_type == AgentTypeEnum.LITELMM:
+        elif agent_type == AgentTypeEnum.LITELLM:
             if "name" not in adapter_instance_config:
                 if (
                     isinstance(self.backend_agent.metadata, dict)

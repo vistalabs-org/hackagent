@@ -11,7 +11,33 @@ Here's a step-by-step guide to get started with HackAgent. Before doing these st
 1. **HackAgent Account**: Sign up at [hackagent.dev](https://hackagent.dev)
 2. **API Key**: Generate an API key from your dashboard
 3. **Target Agent**: A running AI agent to test (Google ADK, LiteLLM, etc.)
-4. **Python Environment**: Python 3.10+ with Poetry or pip
+4. **Development Environment**: Choose your preferred approach:
+   - **SDK**: Python 3.10+ with Poetry or pip (recommended)
+   - **HTTP API**: Any programming language with HTTP client
+   - **CLI**: Command-line interface for quick testing
+
+## 🛠️ Choose Your Interface
+
+HackAgent provides multiple ways to conduct security testing:
+
+### 🐍 SDK (Recommended)
+Use the HackAgent SDK for the easiest integration:
+- Object-oriented interface with built-in error handling
+- Automatic authentication and request formatting
+- Full feature support with comprehensive documentation
+
+### 🌐 HTTP API
+Use the REST API directly for maximum flexibility:
+- **Interactive Documentation**: [https://hackagent.dev/api/schema/swagger-ui](https://hackagent.dev/api/schema/swagger-ui)
+- Compatible with any programming language
+- Full control over requests and responses
+- Ideal for custom integrations
+
+### 🖥️ CLI
+Use the command-line interface for quick testing:
+- No coding required
+- Great for scripts and automation
+- Perfect for one-off security assessments
 
 ## 🚀 Quick Start
 
@@ -159,7 +185,7 @@ attack_config = {
 agent = HackAgent(
     name="litellm_agent",
     endpoint="http://localhost:8000/v1/chat/completions",
-    agent_type=AgentTypeEnum.LITELMM,  # Note: typo in enum
+    agent_type=AgentTypeEnum.LITELLM,
 )
 ```
 
