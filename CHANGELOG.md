@@ -1,3 +1,54 @@
+## v0.2.5 (2025-06-20)
+
+### bump
+
+- **deps-dev**: bump pytest-asyncio from 0.23.8 to 1.0.0
+- **deps-dev**: bump openapi-python-client from 0.24.3 to 0.25.0
+- **deps-dev**: bump google-adk from 0.5.0 to 1.3.0
+- **deps**: bump requests from 2.32.3 to 2.32.4
+- **deps-dev**: bump commitizen from 4.8.0 to 4.8.3
+
+### ✅🤡🧪 Tests
+
+- **testing**: increased coverage for  testings up to 55%
+
+### 💚👷 CI & Build
+
+- **deploy**: fixing cloudflare deployment
+- **deploy**: fixing cloudflare deployment
+- **deploy**: ffixing deployment in cloudflare
+- **deployment**: fixing deployment of docs in cloudflare
+
+### 📌➕⬇️➖⬆️ Dependencies
+
+- **commitizen**: update commitizen
+- **commitizen**: update
+
+### 📝💡 Documentation
+
+- **logo**: adding images and logs
+- **logo**: adding images and logs
+- **documentation**: adding documentation
+- **documentation**: adding documentation
+- **docs**: add documentation
+- **docs**: fixing poetry lock
+- **docs**: resolving conflicts
+- **documentation**: add docs
+- **documentation**: adding documentation
+- **docs**: add documentation
+
+### 🔐🚧📈✏️💩👽️🍻💬🥚🌱🚩🥅🩺 Others
+
+- **typo**: better example for google adk
+
+### 🔖 bump
+
+- **cli**: added cli to improve usage
+
+### 🔧🔨📦️ Configuration, Scripts, Packages
+
+- resolve GitHub Actions npm caching issue by including package-lock.json
+
 ## v0.2.4 (2025-05-22)
 
 ### 🐛🚑️ Fixes
