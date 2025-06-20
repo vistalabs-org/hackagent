@@ -41,7 +41,7 @@ pytest-asyncio = ">=0.23.7,<1.1.0"
 [tool.poetry.group.docs.dependencies]
 pydoc-markdown = {extras = ["docusaurus"], version = "^4.8.2"}
 toml = "^0.10.2"
-packaging = "^24.0"
+packaging = ">=24,<26"
 requests = "^2.31.0"
 
 [tool.commitizen]
